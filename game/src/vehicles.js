@@ -1,7 +1,7 @@
 // vehicles.js — cars of Solmara: boxy original builds, arcade driving,
 // and traffic that follows the street grid. All original.
 import * as THREE from 'three';
-import { mulberry32, rand, pick, clamp, angleLerp, angleDiff, dist2D } from './util.js';
+import { mulberry32, rand, pick, clamp, lerp, angleLerp, angleDiff, dist2D } from './util.js';
 import { CITY, nearestRoadCoord, isOnRoad } from './city.js';
 
 export const CAR_COLORS = [0xc23b2e, 0x2e6fc2, 0xe8b93b, 0x3aa655, 0xe8e4da, 0x22242a, 0x8a4fbf, 0xe87a2e, 0x4fc2c2];

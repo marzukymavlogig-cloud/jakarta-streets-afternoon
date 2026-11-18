@@ -146,7 +146,7 @@ export function createCity(scene, seed) {
   const trunkMat = new THREE.MeshLambertMaterial({ color: 0x7a5a38 });
   const leafMat = new THREE.MeshLambertMaterial({ color: 0x3f8f3a });
   const trunkGeo = new THREE.CylinderGeometry(0.35, 0.55, 9, 6);
-  const leafGeo = new THREE.ConeGeometry(3.2, 3.4, 7);
+  const leafGeo = new THREE.ConeGeometry(2.4, 2.8, 7);
   const palmCount = 130;
   const palms = new THREE.InstancedMesh(trunkGeo, trunkMat, palmCount);
   const leaves = new THREE.InstancedMesh(leafGeo, leafMat, palmCount);
@@ -158,7 +158,7 @@ export function createCity(scene, seed) {
     const z = vertical ? lane + Math.floor(rand(rng, 0, CITY.blocks)) * step - half : along;
     p.set(x, 4.8, z); s.set(1, 1, 1); m4.compose(p, q, s);
     palms.setMatrixAt(i, m4);
-    p.y = 10.2; m4.compose(p, q, s); leaves.setMatrixAt(i, m4);
+    p.y = 9.9; m4.compose(p, q, s); leaves.setMatrixAt(i, m4);
   }
   group.add(palms); group.add(leaves);
   // Lamps.
@@ -231,7 +231,7 @@ export function createCity(scene, seed) {
     updateSky(hour, weather) {
       const t = (hour - 6) / 12; // 0 at dawn, 1 at dusk
       const day = clamp(Math.sin(Math.PI * clamp(t, 0, 1)), 0, 1);
-      const dusk = clamp(1 - Math.abs(t - 0.5) * 2.4, 0, 1) * (t > 0 && t < 1 ? 1 : 0);
+      const dusk = clamp(1 - Math.min(t, 1 - t) * 4, 0, 1) * (t > 0 && t < 1 ? 1 : 0);
       const sunA = Math.PI * clamp(t, 0, 1);
       const sx = Math.cos(sunA) * 1200, sy = Math.sin(sunA) * 900 + 40;
       sun.position.set(sx, Math.max(sy, 30), -700);

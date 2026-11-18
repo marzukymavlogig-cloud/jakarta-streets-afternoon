@@ -110,8 +110,8 @@ export function updatePedestrians(peds, danger, dt) {
     } else {
       p.speed = 1.6;
       if (dist2D(p.mesh.position.x, p.mesh.position.z, tx, tz) < 3) {
-        p.targetX = clamp(p.mesh.position.x + rand(Math, -60, 60), -half, half);
-        p.targetZ = clamp(p.mesh.position.z + rand(Math, -60, 60), -half, half);
+        p.targetX = clamp(p.mesh.position.x + rand(Math.random, -60, 60), -half, half);
+        p.targetZ = clamp(p.mesh.position.z + rand(Math.random, -60, 60), -half, half);
       }
     }
     const dx = tx - p.mesh.position.x, dz = tz - p.mesh.position.z;

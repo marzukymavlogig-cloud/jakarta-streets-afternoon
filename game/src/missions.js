@@ -76,18 +76,18 @@ export const SHOP_CARS = [
 export function createMarker(scene) {
   const g = new THREE.Group();
   const beam = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.2, 2.2, 60, 12, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0xffc93b, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }),
+    new THREE.CylinderGeometry(2.6, 2.6, 80, 12, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffe14d, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }),
   );
-  beam.position.y = 30; g.add(beam);
+  beam.position.y = 40; g.add(beam);
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(2.6, 3.6, 24),
     new THREE.MeshBasicMaterial({ color: 0xffc93b, transparent: true, opacity: 0.85, side: THREE.DoubleSide }),
   );
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.15; g.add(ring);
-  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(1.1),
-    new THREE.MeshBasicMaterial({ color: 0xffc93b }));
-  gem.position.y = 6; g.add(gem);
+  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(1.5),
+    new THREE.MeshBasicMaterial({ color: 0xffe14d }));
+  gem.position.y = 7; g.add(gem);
   g.visible = false;
   scene.add(g);
   return { group: g, beam, ring, gem, spin: 0 };

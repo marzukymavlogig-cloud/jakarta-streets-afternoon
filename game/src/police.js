@@ -34,7 +34,7 @@ function spawnCop(scene, police, x, z) {
 
 function spawnHeli(scene, police) {
   const g = new THREE.Group();
-  const bodyMat = new THREE.MeshLambertMaterial({ color: 0x223344 });
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0x4a6a8a });
   const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.4, 5), bodyMat);
   g.add(body);
   const glass = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.9, 1.4),
@@ -86,6 +86,7 @@ export function updatePolice(police, scene, player, playerCar, now, dt) {
 
   // Cop pursuit: steer toward the player, ram, and slow them down.
   police.sirenPhase += dt * 6;
+  if (police.frozen) return null;
   for (let i = police.cops.length - 1; i >= 0; i--) {
     const cop = police.cops[i];
     const cx = cop.mesh.position.x, cz = cop.mesh.position.z;

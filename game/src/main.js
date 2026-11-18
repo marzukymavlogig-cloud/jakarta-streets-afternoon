@@ -10,7 +10,7 @@ import { createMissions, updateMissions, startNextStory, buyShopCar, SHOP_CARS, 
 import { createHud } from './hud.js';
 import { createAudio } from './audio.js';
 import { createSave } from './save.js';
-import { placeForShot, autopilotDrive, SHOT_NAMES } from './shots.js';
+import { placeForShot, autopilotDrive, frameChase, SHOT_NAMES } from './shots.js';
 import { clamp, lerp, angleLerp, dist2D, mulberry32 } from './util.js';
 
 const params = new URLSearchParams(window.location.search);
@@ -59,6 +59,7 @@ const G = {
   camMode: 'follow', weatherTimer: 90, shot: shotName,
 };
 G.hud = createHud(G);
+window.__solmara = G; // debug handle for playtesting (read-only inspection)
 
 // ---- Input ----
 const keys = new Set();
@@ -272,7 +273,7 @@ const camTarget = new THREE.Vector3();
 function updateCamera(dt) {
   if (G.camMode === 'cinematic' || G.mode === 'title') {
     const t = G.now * 0.05;
-    camera.position.set(Math.sin(t) * 260, 90 + Math.sin(t * 0.6) * 20, Math.cos(t) * 260);
+    camera.position.set(Math.sin(t) * 300, 135 + Math.sin(t * 0.6) * 15, Math.cos(t) * 300);
     camera.lookAt(0, 30, 0);
     return;
   }
@@ -346,9 +347,11 @@ function loop(now) {
   let frame = Math.min((now - last) / 1000, 0.25);
   last = now;
   if (G.mode === 'play' || G.mode === 'title') {
-    acc += frame;
-    let n = 0;
-    while (acc >= STEP && n < 5) { stepWorld(STEP); acc -= STEP; n += 1; }
+    if (!G.shotDone) {
+      acc += frame;
+      let n = 0;
+      while (acc >= STEP && n < 5) { stepWorld(STEP); acc -= STEP; n += 1; }
+    }
   }
   updateCamera(frame);
   renderer.render(scene, camera);
@@ -364,6 +367,7 @@ function runShot(name) {
     city.updateSky(G.hour, G.weather);
     updateCamera(1);
     renderer.render(scene, camera);
+    G.shotDone = true;
     requestAnimationFrame(() => {
       updateCamera(1);
       renderer.render(scene, camera);
@@ -377,6 +381,8 @@ function runShot(name) {
   // Simulate the staged seconds at fixed steps so the frame is deterministic.
   const steps = Math.round(plan.seconds / STEP);
   for (let i = 0; i < steps; i++) stepWorld(STEP);
+  if (name === 'chase') frameChase(G);
+  G.shotDone = true; // freeze the staged frame: no more sim before the screenshot
   city.updateSky(G.hour, G.weather);
   updateCamera(1);
   renderer.render(scene, camera);
