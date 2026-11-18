@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOLMARA — Streets of the Sun</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #10141c;
+    font-family: 'Segoe UI', system-ui, sans-serif; color: #fff; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .hidden { display: none !important; }
+  /* HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  #hud-top-right { position: absolute; top: 14px; right: 16px; text-align: right;
+    text-shadow: 0 2px 6px #000; }
+  #hud-cash { font-size: 30px; font-weight: 800; color: #7ddb6a; }
+  #hud-stars { font-size: 26px; letter-spacing: 4px; color: #ffd23b; }
+  #hud-stars.hot { color: #ff5340; animation: pulse 0.7s infinite alternate; }
+  @keyframes pulse { from { opacity: 1; } to { opacity: 0.45; } }
+  #hud-clock, #hud-weather, #hud-radio { font-size: 15px; font-weight: 600; opacity: 0.95; }
+  #hud-bottom-left { position: absolute; left: 16px; bottom: 16px; }
+  #minimap { width: 168px; height: 168px; border: 3px solid rgba(255,255,255,0.65);
+    border-radius: 50%; background: #10141c; box-shadow: 0 4px 18px rgba(0,0,0,0.6); }
+  #hud-bottom-right { position: absolute; right: 16px; bottom: 16px; text-align: right;
+    text-shadow: 0 2px 6px #000; }
+  #hud-speed { font-size: 34px; font-weight: 800; }
+  #health-bar { width: 200px; height: 12px; background: rgba(0,0,0,0.55);
+    border: 1px solid #fff; border-radius: 6px; margin-top: 4px; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #37c978, #8be36a);
+    border-radius: 6px; }
+  #hud-objective { position: absolute; top: 14px; left: 16px; max-width: 430px;
+    font-size: 17px; font-weight: 700; text-shadow: 0 2px 6px #000;
+    background: rgba(0,0,0,0.45); padding: 8px 12px; border-left: 5px solid #ffc93b; border-radius: 4px; }
+  #hud-timer { font-size: 22px; font-weight: 800; color: #ffc93b; margin-top: 4px; }
+  #hud-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; opacity: 0.85; text-shadow: 0 1px 4px #000; white-space: nowrap; }
+  #toast { position: absolute; top: 22%; left: 50%; transform: translateX(-50%) scale(0.9);
+    text-align: center; opacity: 0; transition: opacity 0.25s, transform 0.25s; }
+  #toast.show { opacity: 1; transform: translateX(-50%) scale(1); }
+  #toast-title { font-size: 44px; font-weight: 900; letter-spacing: 3px; color: #ffc93b;
+    text-shadow: 0 3px 0 #7a2d12, 0 6px 18px #000; }
+  #toast-text { font-size: 18px; font-weight: 600; text-shadow: 0 2px 6px #000; }
+  /* Screens */
+  .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: linear-gradient(180deg, rgba(16,20,28,0.25) 0%, rgba(16,20,28,0.78) 78%); }
+  .screen h1 { font-size: 74px; margin: 0; letter-spacing: 6px; font-weight: 900;
+    background: linear-gradient(180deg, #ffe9a8, #ff7a2e); -webkit-background-clip: text;
+    background-clip: text; color: transparent; text-shadow: 0 6px 30px rgba(0,0,0,0.4); }
+  .screen h2 { font-size: 22px; letter-spacing: 8px; font-weight: 700; color: #ffd23b; margin: 6px 0 18px; }
+  .screen p { max-width: 620px; font-size: 17px; line-height: 1.55; color: #f2ede2; margin: 6px 0; }
+  .screen .controls { font-size: 14px; color: #cfd6de; background: rgba(0,0,0,0.45);
+    padding: 10px 18px; border-radius: 8px; margin-top: 14px; line-height: 1.7; }
+  .btn { pointer-events: auto; cursor: pointer; font-size: 19px; font-weight: 800; letter-spacing: 1px;
+    color: #1a1206; background: linear-gradient(180deg, #ffd23b, #ff9a2e); border: none;
+    padding: 13px 34px; margin: 6px; border-radius: 10px; box-shadow: 0 4px 0 #a34d00, 0 8px 22px rgba(0,0,0,0.5); }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:disabled { filter: grayscale(0.8); opacity: 0.55; cursor: default; }
+  .btn.ghost { background: rgba(255,255,255,0.16); color: #fff; box-shadow: none; border: 2px solid #fff; }
+  #shop-list { margin-top: 12px; }
+  .shop-row { display: flex; gap: 14px; align-items: center; justify-content: center;
+    font-size: 18px; background: rgba(0,0,0,0.5); padding: 10px 18px; border-radius: 8px; margin: 6px 0; }
+  .swatch { width: 26px; height: 26px; border-radius: 5px; border: 2px solid #fff; display: inline-block; }
+  .shop-row button { cursor: pointer; font-weight: 800; padding: 6px 16px; border-radius: 6px; border: none;
+    background: #ffd23b; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game" aria-label="SOLMARA: an open-world crime game in a sun-baked river city"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="hud-objective">Press M to start the next story job.</div>
+  <div id="hud-top-right">
+    <div id="hud-cash">$250</div>
+    <div id="hud-stars">☆☆☆☆☆</div>
+    <div id="hud-clock">10:30</div>
+    <div id="hud-weather">☀ Clear</div>
+    <div id="hud-radio">♪ Sol FM</div>
+  </div>
+  <div id="hud-bottom-left"><canvas id="minimap" width="168" height="168"></canvas></div>
+  <div id="hud-bottom-right">
+    <div id="hud-speed">0 km/h</div>
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div>HEALTH <span id="hud-health">100</span></div>
+    <div id="hud-timer"></div>
+  </div>
+  <div id="hud-hint">WASD move / drive &nbsp;·&nbsp; E enter car &nbsp;·&nbsp; F punch / shoot &nbsp;·&nbsp; M next job &nbsp;·&nbsp; R radio &nbsp;·&nbsp; Space handbrake &nbsp;·&nbsp; drag mouse to look &nbsp;·&nbsp; Esc pause</div>
+  <div id="toast"><div id="toast-title"></div><div id="toast-text"></div></div>
+</div>
+
+<div id="screen-title" class="screen">
+  <h1>SOLMARA</h1>
+  <h2>STREETS OF THE SUN</h2>
+  <p>Mara Voss came home to save her brother's garage — and found a city that only
+  respects people who take what they want. Drive it, steal it, outrun the Solmara PD,
+  and run five jobs across a sun-baked river city that never sleeps.</p>
+  <p>An original open-world crime game: drive and steal cars, taxi and delivery gigs,
+  a wanted system with police chases and a helicopter, a day–night cycle with rain
+  and fog, three radio stations, a car dealership, and a save that keeps your story.</p>
+  <div>
+    <button class="btn" id="btn-new">NEW GAME</button>
+    <button class="btn" id="btn-continue" disabled>CONTINUE</button>
+    <button class="btn ghost" id="btn-freeroam">FREE ROAM</button>
+  </div>
+  <div class="controls">WASD move / drive &nbsp;·&nbsp; E enter or steal a car &nbsp;·&nbsp; F punch / shoot &nbsp;·&nbsp; M next story job<br>
+  R radio &nbsp;·&nbsp; Space handbrake &nbsp;·&nbsp; C camera &nbsp;·&nbsp; drag mouse to look &nbsp;·&nbsp; Esc pause &amp; save</div>
+</div>
+
+<div id="screen-pause" class="screen hidden">
+  <h1 style="font-size:52px">PAUSED</h1>
+  <p>Solmara waits for no one — except right now.</p>
+  <div>
+    <button class="btn" id="btn-resume">RESUME</button>
+    <button class="btn" id="btn-save">SAVE GAME</button>
+    <button class="btn ghost" id="btn-restart">RESTART STORY</button>
+  </div>
+  <div class="controls">Progress also saves automatically after every finished job.</div>
+</div>
+
+<div id="screen-dead" class="screen hidden">
+  <h1 id="dead-title" style="font-size:64px">WASTED</h1>
+  <p id="dead-text">Mara went down. The garage is still waiting.</p>
+  <div><button class="btn" id="btn-dead">BACK TO THE GARAGE</button></div>
+</div>
+
+<div id="screen-shop" class="screen hidden">
+  <h1 style="font-size:44px">SUNSET MOTORS</h1>
+  <p id="shop-cash">Your cash: $250</p>
+  <div id="shop-list"></div>
+  <p id="shop-msg"></p>
+  <div><button class="btn" id="btn-shop-close">DONE</button></div>
+</div>
+
+<p id="status" role="status" aria-live="polite"></p>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
