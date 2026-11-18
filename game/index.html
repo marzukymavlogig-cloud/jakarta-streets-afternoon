@@ -21,11 +21,30 @@
   #hud-dj { font-size: 13px; font-weight: 500; font-style: italic; opacity: 0.85;
     max-width: 320px; margin-top: 2px; }
   #hud-bottom-left { position: absolute; left: 16px; bottom: 16px; }
+  #hud-bottom-left #health-bar { margin-top: 8px; width: 168px; }
+  #subtitle { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%);
+    max-width: 640px; text-align: center; font-size: 17px; font-weight: 600;
+    background: rgba(0,0,0,0.55); padding: 8px 16px; border-radius: 6px;
+    text-shadow: 0 1px 4px #000; opacity: 0; transition: opacity 0.3s; }
+  #subtitle.show { opacity: 1; }
+  /* v4.1 (ref 2): dialogue portrait — a round initial badge for the speaker. */
+  #subtitle-face { display: inline-block; width: 34px; height: 34px; line-height: 34px;
+    border-radius: 50%; background: #d84a4a; color: #fff; font-size: 19px; font-weight: 900;
+    text-align: center; margin-right: 10px; vertical-align: middle; border: 2px solid #fff; }
+  #subtitle-name { color: #ffd23b; font-weight: 800; margin-right: 8px; }
   #minimap { width: 168px; height: 168px; border: 3px solid rgba(255,255,255,0.65);
     border-radius: 50%; background: #10141c; box-shadow: 0 4px 18px rgba(0,0,0,0.6); }
   #hud-bottom-right { position: absolute; right: 16px; bottom: 16px; text-align: right;
     text-shadow: 0 2px 6px #000; }
-  #hud-speed { font-size: 34px; font-weight: 800; }
+  #hud-speed { font-size: 46px; font-weight: 800; }
+  #hud-weapon { font-size: 17px; font-weight: 800; color: #ffd23b; margin-top: 2px; }
+  /* v4.1 (ref 2): weapon slots — 1 PISTOL · 2 SMG · 3 SHOTGUN · 4 SENAPAN,
+     dim until owned, gold when active. */
+  #hud-slots { margin-top: 4px; font-size: 12px; font-weight: 800; letter-spacing: 1px; }
+  #hud-slots .slot { display: inline-block; padding: 3px 7px; margin-left: 5px;
+    background: rgba(0,0,0,0.5); color: #8a8f98; border: 1px solid #555; border-radius: 4px; }
+  #hud-slots .slot.owned { color: #e8e4da; border-color: #999; }
+  #hud-slots .slot.active { color: #1a1206; background: #ffd23b; border-color: #ffd23b; }
   #health-bar { width: 200px; height: 12px; background: rgba(0,0,0,0.55);
     border: 1px solid #fff; border-radius: 6px; margin-top: 4px; }
   #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #37c978, #8be36a);
@@ -33,6 +52,14 @@
   #hud-objective { position: absolute; top: 14px; left: 16px; max-width: 430px;
     font-size: 17px; font-weight: 700; text-shadow: 0 2px 6px #000;
     background: rgba(0,0,0,0.45); padding: 8px 12px; border-left: 5px solid #ffc93b; border-radius: 4px; }
+  /* v4.1 (ref 2): mission progress bar under the objective, like the
+     "MELARIKAN DIRI (68%)" panel — fills as the job's steps complete. */
+  #hud-mission-bar { display: none; position: relative; height: 10px; margin-top: 7px;
+    background: rgba(0,0,0,0.6); border-radius: 5px; overflow: hidden; }
+  #hud-mission-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ffd23b, #ff9a2e);
+    border-radius: 5px; transition: width 0.3s; }
+  #hud-mission-pct { position: absolute; right: 6px; top: -1px; font-size: 10px; font-weight: 800;
+    color: #fff; text-shadow: 0 1px 3px #000; }
   #hud-timer { font-size: 22px; font-weight: 800; color: #ffc93b; margin-top: 4px; }
   #hud-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
     font-size: 13px; opacity: 0.85; text-shadow: 0 1px 4px #000; white-space: nowrap; }
@@ -75,7 +102,9 @@
 <canvas id="game" aria-label="JAKARTA: an open-world crime game in golden-hour Jakarta, Indonesia"></canvas>
 
 <div id="hud" class="hidden">
-  <div id="hud-objective">Tekan M untuk mulai job cerita berikutnya.</div>
+  <div id="hud-objective"><span id="hud-objective-text">Tekan M untuk mulai job cerita berikutnya.</span>
+    <div id="hud-mission-bar"><div id="hud-mission-fill"></div><span id="hud-mission-pct"></span></div>
+  </div>
   <div id="hud-top-right">
     <div id="hud-cash">Rp250.000</div>
     <div id="hud-stars">☆☆☆☆☆</div>
@@ -84,14 +113,19 @@
     <div id="hud-radio">♪ Kota FM 98</div>
     <div id="hud-dj"></div>
   </div>
-  <div id="hud-bottom-left"><canvas id="minimap" width="168" height="168"></canvas></div>
-  <div id="hud-bottom-right">
-    <div id="hud-speed">0 km/h</div>
+  <div id="hud-bottom-left">
+    <canvas id="minimap" width="168" height="168"></canvas>
     <div id="health-bar"><div id="health-fill"></div></div>
     <div>HEALTH <span id="hud-health">100</span></div>
+  </div>
+  <div id="hud-bottom-right">
+    <div id="hud-speed">0 km/h</div>
+    <div id="hud-weapon">TANGAN KOSONG · 1–4 ganti senjata</div>
+    <div id="hud-slots"></div>
     <div id="hud-timer"></div>
   </div>
-  <div id="hud-hint">WASD jalan / nyetir &nbsp;·&nbsp; E naik mobil &nbsp;·&nbsp; F pukul / tembak &nbsp;·&nbsp; M job berikutnya &nbsp;·&nbsp; R radio &nbsp;·&nbsp; Spasi rem tangan &nbsp;·&nbsp; drag mouse untuk melihat &nbsp;·&nbsp; Esc jeda</div>
+  <div id="subtitle"><span id="subtitle-face">M</span><span id="subtitle-name"></span><span id="subtitle-text"></span></div>
+  <div id="hud-hint">WASD jalan / nyetir &nbsp;·&nbsp; E naik mobil &nbsp;·&nbsp; F pukul / tembak &nbsp;·&nbsp; 1–4 senjata &nbsp;·&nbsp; R isi ulang &nbsp;·&nbsp; M job &nbsp;·&nbsp; T radio &nbsp;·&nbsp; Spasi rem &nbsp;·&nbsp; Esc jeda</div>
   <div id="toast"><div id="toast-title"></div><div id="toast-text"></div></div>
 </div>
 
@@ -111,8 +145,8 @@
     <button class="btn" id="btn-continue" disabled>CONTINUE</button>
     <button class="btn ghost" id="btn-freeroam">FREE ROAM</button>
   </div>
-  <div class="controls">WASD jalan / nyetir &nbsp;·&nbsp; E naik atau bajak mobil &nbsp;·&nbsp; F pukul / tembak &nbsp;·&nbsp; M job cerita berikutnya<br>
-  R radio &nbsp;·&nbsp; Spasi rem tangan &nbsp;·&nbsp; C kamera &nbsp;·&nbsp; drag mouse untuk melihat &nbsp;·&nbsp; Esc jeda &amp; simpan</div>
+  <div class="controls">WASD jalan / nyetir &nbsp;·&nbsp; E naik atau bajak mobil &nbsp;·&nbsp; F pukul / tembak &nbsp;·&nbsp; 1–4 ganti senjata &nbsp;·&nbsp; R isi ulang<br>
+  M job cerita berikutnya &nbsp;·&nbsp; T radio &nbsp;·&nbsp; Spasi rem tangan &nbsp;·&nbsp; C kamera &nbsp;·&nbsp; drag mouse untuk melihat &nbsp;·&nbsp; Esc jeda &amp; simpan</div>
 </div>
 
 <div id="screen-pause" class="screen hidden">

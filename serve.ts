@@ -1,5 +1,7 @@
 // A tiny static server for the JAKARTA game/ (Node 22, standard library only), so an entry can be played
 // locally without a build step: `node serve.ts` serves game/ on http://localhost:8080.
+// v4 note: unchanged server logic — the v4 recording session reviewed this file
+// and left its behaviour as-is.
 // It sends the MIME types a browser game needs, refuses any path outside game/, answers HEAD with
 // headers only, and otherwise does nothing clever: this is a development convenience, not a web
 // server for the internet.

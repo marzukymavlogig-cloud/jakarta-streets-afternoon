@@ -3,6 +3,8 @@
 // gigs and a car dealership. All names, characters and jobs are original.
 // EASY BY DESIGN (v2): forgiving timers, big markers, low police pressure
 // during story jobs, generous checkpoints.
+// v4 (benchmark): every job opens with a GTA-style dialogue subtitle
+// (MARA: "...") at the bottom of the screen.
 import * as THREE from 'three';
 import { clamp, dist2D, formatRp } from './util.js';
 import { CITY } from './city.js';
@@ -25,12 +27,14 @@ const STORY = [
   {
     id: 'homecoming', title: '1 — Pulang Kampung',
     brief: 'Mara pulang ke Jakarta. Bengkel kakaknya nyaris tutup — datang ke Bengkel Mara dan lihat apa yang tersisa.',
+    line: 'Akhirnya pulang. Bengkel kakak masih berdiri — nyaris.',
     steps: [{ text: 'Pergi ke Bengkel Mara', at: 'garage', radius: 16 }],
     reward: 100000,
   },
   {
     id: 'firstfare', title: '2 — Penumpang Pertama',
     brief: 'Bengkel butuh uang. Jemput penumpang di Warung Kopi Senja dan antar ke Gelora Bung Karno — santai saja, waktunya longgar.',
+    line: 'Satu penumpang, satu jalan. Bengkel butuh uang, aku butuh jalan.',
     steps: [
       { text: 'Jemput penumpang di Warung Kopi Senja', at: 'diner', radius: 14, onArrive: 'pickup' },
       { text: 'Antar penumpang ke Gelora Bung Karno', at: 'stadium', radius: 15, timer: 240, onArrive: 'dropoff' },
@@ -40,6 +44,7 @@ const STORY = [
   {
     id: 'package', title: '3 — Paket dari Priok',
     brief: 'Satu peti di Tanjung Priok, jangan banyak tanya. Ambil, lalu bawa pulang ke bengkel. Polisi pelabuhan mungkin cerewet — tapi santai, mereka lambat sore ini.',
+    line: 'Jangan banyak tanya, katanya. Di Priok, itu justru yang bikin penasaran.',
     steps: [
       { text: 'Ambil peti di Tanjung Priok', at: 'docks', radius: 14, onArrive: 'hot' },
       { text: 'Bawa peti ke Bengkel Mara', at: 'garage', radius: 15, timer: 300, onArrive: 'deliver' },
@@ -49,6 +54,7 @@ const STORY = [
   {
     id: 'heist', title: '4 — Comet Emas',
     brief: 'Sebuah Comet emas terparkir tanpa penjaga di Mobil Bekas Mangga Dua. Ambil. Polisi akan mengejar — tapi sore ini mereka cuma berdua, dan kamu lebih cepat.',
+    line: 'Comet emas, tanpa penjaga. Jakarta memang suka menguji orang pulang kampung.',
     steps: [
       { text: 'Ambil Comet emas di Mangga Dua', at: 'dealer', radius: 24, onArrive: 'steal' },
       { text: 'Bawa Comet ke Bengkel Mara', at: 'garage', radius: 15, onArrive: 'deliver' },
@@ -58,6 +64,7 @@ const STORY = [
   {
     id: 'sunsetrun', title: '5 — Balapan Senja',
     brief: 'Satu balapan keliling Jakarta di sore hari, lima checkpoint, santai tapi pasti. Menang dan bengkel selamat.',
+    line: 'Lima checkpoint, satu matahari sore. Bengkel selamat atau tidak — sore ini yang menentukan.',
     steps: [
       { text: 'Checkpoint 1 — Monas', at: 'plaza', radius: 16 },
       { text: 'Checkpoint 2 — Hotel Melati', at: 'motel', radius: 16 },
@@ -118,6 +125,7 @@ export function startStoryMission(G, index) {
   G.police.storyMode = true; // easy: police go gentle during story jobs
   G.hud.setObjective(`${def.title}: ${def.steps[0].text}`);
   G.hud.toast(def.title, def.brief);
+  if (def.line) G.hud.subtitle('MARA', def.line); // v4: dialogue subtitle
   G.audio.blip(660);
   placeMarkerForStep(G);
 }

@@ -1,6 +1,7 @@
 // audio.js — all sound is synthesised live with WebAudio: engine hum,
 // sirens, impacts, and three procedural Indonesian radio stations with
 // DJ chatter text. No audio files.
+// v4: per-weapon gunshots, a bump crunch, traffic horns, and a low city hum.
 export function createAudio() {
   let ctx = null, master = null, engineOsc = null, engineGain = null;
   let radioNodes = null, station = 0, sirenNodes = null;
@@ -47,6 +48,7 @@ export function createAudio() {
         engineOsc.connect(lp); lp.connect(engineGain); engineGain.connect(master);
         engineOsc.start();
         audio.startRadio();
+        audio.startCityHum(); // v4: low street ambience under everything
       } catch { ctx = null; }
     },
     setEngine(speed01, on) {
@@ -71,15 +73,53 @@ export function createAudio() {
       g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
       o.connect(g); g.connect(master); o.start(); o.stop(ctx.currentTime + 0.22);
     },
-    shot() {
+    shot(kind = 'pistol') {
+      // v4: each weapon sounds different — pistol crack, SMG chatter, shotgun
+      // boom, rifle crack. Kinds: pistol | smg | shotgun | rifle.
       if (!ctx) return;
+      const cfg = {
+        pistol: { dur: 0.12, gain: 0.35, low: 900 },
+        smg: { dur: 0.08, gain: 0.25, low: 1200 },
+        shotgun: { dur: 0.28, gain: 0.5, low: 300 },
+        rifle: { dur: 0.16, gain: 0.4, low: 700 },
+      }[kind] ?? { dur: 0.12, gain: 0.35, low: 900 };
       const n = ctx.createBufferSource();
-      const buf = ctx.createBuffer(1, ctx.sampleRate * 0.12, ctx.sampleRate);
+      const buf = ctx.createBuffer(1, ctx.sampleRate * cfg.dur, ctx.sampleRate);
       const d = buf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
       n.buffer = buf;
-      const g = ctx.createGain(); g.gain.value = 0.35;
-      n.connect(g); g.connect(master); n.start();
+      const g = ctx.createGain(); g.gain.value = cfg.gain;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cfg.low * 4;
+      n.connect(lp); lp.connect(g); g.connect(master); n.start();
+    },
+    bump() {
+      // v4: the dull crunch of a car (or a running Mara) hitting a wall.
+      if (!ctx) return;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(90, ctx.currentTime);
+      o.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.22);
+      g.gain.setValueAtTime(0.4, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+      o.connect(g); g.connect(master); o.start(); o.stop(ctx.currentTime + 0.26);
+      const n = ctx.createBufferSource();
+      const buf = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) * 0.5;
+      n.buffer = buf;
+      const ng = ctx.createGain(); ng.gain.value = 0.25;
+      n.connect(ng); ng.connect(master); n.start();
+    },
+    honk(pitch = 1) {
+      // v4: a Jakarta traffic horn — two-tone, short. Called throttled.
+      if (!ctx) return;
+      const t = ctx.currentTime;
+      [370 * pitch, 466 * pitch].forEach((f) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'square'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.05, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+        o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.32);
+      });
     },
     fanfare() {
       if (!ctx) return;
@@ -108,6 +148,28 @@ export function createAudio() {
       if (!sirenNodes || !ctx) return;
       try { sirenNodes.o.stop(); sirenNodes.lfo.stop(); } catch { /* already stopped */ }
       sirenNodes = null;
+    },
+    startCityHum() {
+      // v4: Los Santos bustle you can hear — a low looped street wash
+      // (filtered noise) that sits under the radio and the engine.
+      if (!ctx || audio._hum) return;
+      try {
+        const len = ctx.sampleRate * 2;
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        let last = 0;
+        for (let i = 0; i < len; i++) {
+          const white = Math.random() * 2 - 1;
+          last = (last + 0.02 * white) / 1.02; // brown-ish
+          d[i] = last * 3.5;
+        }
+        const src = ctx.createBufferSource();
+        src.buffer = buf; src.loop = true;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 320;
+        const g = ctx.createGain(); g.gain.value = 0.05;
+        src.connect(lp); lp.connect(g); g.connect(master); src.start();
+        audio._hum = src;
+      } catch { /* ambience is optional */ }
     },
     cycleStation() {
       station = (station + 1) % STATIONS.length;

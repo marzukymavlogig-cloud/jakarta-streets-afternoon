@@ -8,11 +8,26 @@
 // legs, a torso that bobs and leans, and idle breathing. Varied builds
 // (slim/broad, tall/short), a wider Indonesian skin-tone range, varied
 // trousers, and Jakarta street variety: hijab, caps, backpacks, buns.
-// Honest note: still stylised low-poly — no faces, no fingers, no cloth
-// simulation — but the walk reads as human, not as a sliding box.
+// v4 — FACES: every character gets eyes, brows, nose and mouth (util.addFace),
+// with glasses and moustaches among the crowd; Mara gets lipstick + lashes
+// so she is distinct at a glance. The hijab face plate now sits proud of
+// the scarf instead of hidden inside it (v3's disc was buried). Buildings
+// are solid in v4 too: feet and peds resolve against the city colliders.
+// Honest note: still stylised low-poly — no fingers, no cloth simulation —
+// but the walk reads as human, not as a sliding box.
 import * as THREE from 'three';
-import { mulberry32, rand, pick, clamp, angleLerp, dist2D } from './util.js';
+import { mulberry32, rand, pick, clamp, angleLerp, dist2D, addFace, circleHitsColliders, resolveCircleOut } from './util.js';
 import { CITY, PLAZA_STALLS } from './city.js';
+
+// v4 — Mara's arsenal, CJ-style: pistol, SMG, shotgun, rifle. Keys 1–4
+// switch, R reloads. `mag` is the clip, `reserve` the spare rounds.
+export const WEAPONS = {
+  pistol: { name: 'PISTOL', mag: 12, rate: 0.32, auto: false, range: 32, pellets: 1, spread: 0.02 },
+  smg: { name: 'SMG', mag: 30, rate: 0.09, auto: true, range: 26, pellets: 1, spread: 0.06 },
+  shotgun: { name: 'SHOTGUN', mag: 6, rate: 0.85, auto: false, range: 18, pellets: 6, spread: 0.14 },
+  rifle: { name: 'SENAPAN', mag: 30, rate: 0.13, auto: true, range: 60, pellets: 1, spread: 0.015 },
+};
+export const WEAPON_ORDER = ['pistol', 'smg', 'shotgun', 'rifle'];
 
 const SKINS = [0x8a5a3b, 0xc98d64, 0x6b4423, 0xe8b88a, 0x4a2f1d, 0xa06a42, 0x7a4a28, 0xd9a075];
 const SHIRTS = [0xd84a4a, 0x3a7bd8, 0x3aa655, 0xe8b93b, 0x8a4fbf, 0xe8e4da, 0x22242a, 0xe87a2e,
@@ -32,6 +47,9 @@ const GEO = {
   shin: new THREE.CapsuleGeometry(0.088, 0.36, 4, 8),
   cap: new THREE.CylinderGeometry(0.24, 0.25, 0.1, 10),
   brim: new THREE.BoxGeometry(0.32, 0.035, 0.22),
+  // v4.1 (ref 2): ojol helmet — a green dome that leaves the face visible.
+  helmet: new THREE.SphereGeometry(0.27, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.45),
+  visor: new THREE.BoxGeometry(0.34, 0.1, 0.06),
   bun: new THREE.SphereGeometry(0.11, 8, 6),
   pack: new THREE.BoxGeometry(0.36, 0.44, 0.16),
 };
@@ -61,16 +79,23 @@ export function buildPersonMesh(shirt, skin, scale = 1, opts = {}) {
   head.position.y = 1.79; head.scale.set(0.94, 1.08, 0.98);
   body.add(head);
   const variant = opts.variant ?? 'hair';
-  if (variant === 'hijab') {
+  if (variant === 'helmet') {
+    // v4.1 (ref 2): ojol hijau — green helmet dome + dark visor, face clear.
+    const helmetMat = new THREE.MeshLambertMaterial({ color: 0x1faa59 });
+    const helmet = new THREE.Mesh(GEO.helmet, helmetMat);
+    helmet.position.y = 1.82; body.add(helmet);
+    const visor = new THREE.Mesh(GEO.visor, new THREE.MeshLambertMaterial({ color: 0x1a2028 }));
+    visor.position.set(0, 1.87, 0.22); body.add(visor);
+  } else if (variant === 'hijab') {
     const hijabMat = new THREE.MeshLambertMaterial({ color: opts.hijab ?? pick(Math.random, HIJABS) });
     const hijab = new THREE.Mesh(GEO.hijab, hijabMat);
-    hijab.position.y = 1.8; hijab.scale.set(0.96, 1.1, 1.0);
+    hijab.position.y = 1.8; hijab.scale.set(0.96, 1.1, 0.85); // flattened front so the face shows
     body.add(hijab);
     const drape = new THREE.Mesh(GEO.hijabDrape, hijabMat);
     drape.position.y = 1.5; body.add(drape);
-    // Face stays visible: a skin disc on the front of the scarf.
+    // Face stays visible: a skin disc on the front of the scarf, proud of it.
     const face = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 8), skinMat);
-    face.position.set(0, 1.78, 0.1); face.scale.set(0.95, 1.05, 0.7);
+    face.position.set(0, 1.78, 0.15); face.scale.set(0.95, 1.05, 0.6);
     body.add(face);
   } else if (variant === 'cap') {
     const capMat = new THREE.MeshLambertMaterial({ color: opts.capColor ?? 0x22242a });
@@ -88,6 +113,13 @@ export function buildPersonMesh(shirt, skin, scale = 1, opts = {}) {
       bun.position.set(0, 1.95, -0.2); body.add(bun);
     }
   }
+  // v4: every character gets a face — eyes, brows, nose, mouth — at a depth
+  // that sits proud of the head (deeper inside a hijab, where the scarf
+  // covers more). Glasses and moustaches vary the crowd; Mara is distinct.
+  addFace(body, {
+    z: variant === 'hijab' ? 0.26 : 0.205,
+    skinMat, glasses: !!opts.glasses, mustache: !!opts.mustache, mara: !!opts.mara,
+  });
   if (opts.backpack) {
     const pack = new THREE.Mesh(GEO.pack, new THREE.MeshLambertMaterial({ color: opts.packColor ?? 0x3a4a5a }));
     pack.position.set(0, 1.28, -0.3); body.add(pack);
@@ -155,7 +187,9 @@ export function animateWalk(parts, phase, sf, t) {
 
 export function createPlayer(scene, x, z) {
   // Mara: red jacket, hair in a bun, Jakarta afternoon. Her brother runs Bengkel Mara.
-  const parts = buildPersonMesh(0xd84a4a, 0xc98d64, 1.05, { variant: 'bun', pants: 0x2e3a4a });
+  // v4: a distinct face (lipstick + lashes) and an arsenal that starts empty —
+  // fists until she picks up the pistol at the garage, then 1–4 / R.
+  const parts = buildPersonMesh(0xd84a4a, 0xc98d64, 1.05, { variant: 'bun', pants: 0x2e3a4a, mara: true });
   parts.group.position.set(x, 0, z);
   scene.add(parts.group);
   return {
@@ -163,12 +197,16 @@ export function createPlayer(scene, x, z) {
     pos: parts.group.position,
     heading: 0, speed: 0, health: 100,
     cash: 250000, inCar: null, weapon: 'fists', ammo: 0, // Rp250.000 from the start
+    arsenal: {}, // v4: { pistol: { mag, reserve }, smg: …, shotgun: …, rifle: … }
+    fireCd: 0, reloadCd: 0, lastShotAt: -999, bump: false, bumpCd: 0,
     punchCd: 0, hurtCd: 0, walkPhase: 0,
   };
 }
 
-/** WASD on foot, relative to the camera yaw. Space jumps a little, Shift runs. */
-export function updatePlayerOnFoot(player, input, camYaw, dt, now) {
+/** WASD on foot, relative to the camera yaw. Space jumps a little, Shift runs.
+ *  v4: solid city — Mara walks axis by axis and slides along walls instead of
+ *  passing through them; a hard run into a wall sets player.bump for feedback. */
+export function updatePlayerOnFoot(player, input, camYaw, dt, now, colliders) {
   const run = input.run ? 9 : 5;
   let fx = 0, fz = 0;
   if (input.forward) { fx += Math.sin(camYaw); fz += Math.cos(camYaw); }
@@ -184,13 +222,36 @@ export function updatePlayerOnFoot(player, input, camYaw, dt, now) {
   } else {
     player.speed = lerp(player.speed, 0, clamp(dt * 10, 0, 1));
   }
-  player.pos.x = clamp(player.pos.x + Math.sin(player.heading) * player.speed * dt, -CITY.half - 20, CITY.half + 55);
-  player.pos.z = clamp(player.pos.z + Math.cos(player.heading) * player.speed * dt, -CITY.half - 20, CITY.half + 20);
+  const stepX = Math.sin(player.heading) * player.speed * dt;
+  const stepZ = Math.cos(player.heading) * player.speed * dt;
+  if (colliders) {
+    // A teleport or spawn inside a wall gets pushed out instead of stuck.
+    resolveCircleOut(player.pos, 0.5, colliders);
+    // Axis-separated: try x, then z, so Mara slides along a wall she runs into.
+    let blocked = false;
+    if (!circleHitsColliders(player.pos.x + stepX, player.pos.z, 0.5, colliders)) {
+      player.pos.x += stepX;
+    } else blocked = true;
+    if (!circleHitsColliders(player.pos.x, player.pos.z + stepZ, 0.5, colliders)) {
+      player.pos.z += stepZ;
+    } else blocked = true;
+    if (blocked && player.speed > 3 && player.bumpCd <= 0) {
+      player.bump = true; player.bumpCd = 0.6;
+    }
+  } else {
+    player.pos.x += stepX;
+    player.pos.z += stepZ;
+  }
+  player.pos.x = clamp(player.pos.x, -CITY.half - 20, CITY.half + 55);
+  player.pos.z = clamp(player.pos.z, -CITY.half - 20, CITY.half + 20);
   if (player.pos.x > CITY.half + 6 && Math.abs(player.pos.z) > 14) player.pos.x = CITY.half + 6;
   player.mesh.rotation.y = player.heading;
   animateWalk(player.parts, player.walkPhase, clamp(player.speed / 9, 0, 1), now);
   player.punchCd = Math.max(0, player.punchCd - dt);
   player.hurtCd = Math.max(0, player.hurtCd - dt);
+  player.fireCd = Math.max(0, player.fireCd - dt);
+  player.reloadCd = Math.max(0, player.reloadCd - dt);
+  player.bumpCd = Math.max(0, player.bumpCd - dt);
 }
 function lerp(a, b, t) { return a + (b - a) * t; }
 
@@ -203,10 +264,16 @@ export function createPedestrians(scene, seed, count = 44, roam = 26) {
   const peds = [];
   for (let i = 0; i < count; i++) {
     const plaza = i >= roam;
-    const variant = rng() < 0.3 ? 'hijab' : (rng() < 0.18 ? 'cap' : (rng() < 0.12 ? 'bun' : 'hair'));
-    const parts = buildPersonMesh(pick(rng, SHIRTS), pick(rng, SKINS), rand(rng, 0.92, 1.08), {
+    // v4.1 (ref 2): ~8% of the roaming crowd are ojol hijau — green jacket
+    // (Gojek-style) and green helmet, walking the sidewalks.
+    const ojol = !plaza && rng() < 0.08;
+    const variant = ojol ? 'helmet' : (rng() < 0.3 ? 'hijab' : (rng() < 0.18 ? 'cap' : (rng() < 0.12 ? 'bun' : 'hair')));
+    // v4: faces vary — some wear glasses, some men grow a moustache.
+    const glasses = !ojol && variant !== 'hijab' && rng() < 0.15;
+    const mustache = (variant === 'hair' || variant === 'cap') && rng() < 0.22;
+    const parts = buildPersonMesh(ojol ? 0x1faa59 : pick(rng, SHIRTS), pick(rng, SKINS), rand(rng, 0.92, 1.08), {
       variant, pants: pick(rng, PANTS), build: rand(rng, 0.9, 1.15),
-      backpack: rng() < 0.22, hijab: pick(rng, HIJABS),
+      backpack: rng() < 0.22, hijab: pick(rng, HIJABS), glasses, mustache,
     });
     let x, z;
     if (plaza) {
@@ -220,7 +287,7 @@ export function createPedestrians(scene, seed, count = 44, roam = 26) {
     peds.push({
       parts, mesh: parts.group, heading: rand(rng, 0, Math.PI * 2),
       speed: rand(rng, 1.2, 2.2), walkPhase: rand(rng, 0, 6),
-      targetX: x, targetZ: z, fleeing: 0, state: 'walk', pause: 0,
+      targetX: x, targetZ: z, fleeing: 0, hurt: 0, state: 'walk', pause: 0,
       plaza, baseSpeed: plaza ? rand(rng, 0.9, 1.6) : rand(rng, 1.2, 2.2),
     });
   }
@@ -228,11 +295,13 @@ export function createPedestrians(scene, seed, count = 44, roam = 26) {
 }
 
 /** Peds stroll between sidewalk points; they run from gunfire, fights and police.
- *  Plaza peds browse: they drift stall to stall and pause to look at the goods. */
-export function updatePedestrians(peds, danger, dt, now) {
+ *  Plaza peds browse: they drift stall to stall and pause to look at the goods.
+ *  v4: solid city — a ped who would walk into a wall is pushed back out. */
+export function updatePedestrians(peds, danger, dt, now, colliders) {
   const half = CITY.half;
   for (const p of peds) {
     if (p.fleeing > 0) p.fleeing -= dt;
+    if (p.hurt > 0) p.hurt -= dt;
     if (p.pause > 0) {
       p.pause -= dt;
       p.speed = lerp(p.speed, 0, clamp(dt * 8, 0, 1));
@@ -245,7 +314,9 @@ export function updatePedestrians(peds, danger, dt, now) {
       p.fleeing = 3;
     }
     if (p.fleeing > 0) {
-      const dx = p.mesh.position.x - danger.x, dz = p.mesh.position.z - danger.z;
+      // Flee from the danger — or, if it is gone, keep running straight ahead.
+      const dx = danger ? p.mesh.position.x - danger.x : Math.sin(p.heading);
+      const dz = danger ? p.mesh.position.z - danger.z : Math.cos(p.heading);
       const d = Math.hypot(dx, dz) || 1;
       tx = p.mesh.position.x + (dx / d) * 30; tz = p.mesh.position.z + (dz / d) * 30;
       p.speed = lerp(p.speed, 5.5, clamp(dt * 6, 0, 1));
@@ -278,8 +349,17 @@ export function updatePedestrians(peds, danger, dt, now) {
       p.mesh.position.x += Math.sin(p.heading) * p.speed * dt;
       p.mesh.position.z += Math.cos(p.heading) * p.speed * dt;
       p.walkPhase += dt * p.speed * 1.8;
+      // v4: solid buildings — slide out of a wall instead of through it.
+      if (colliders) resolveCircleOut(p.mesh.position, 0.5, colliders);
     }
     p.mesh.rotation.y = p.heading;
     animateWalk(p.parts, p.walkPhase, clamp(p.speed / 5.5, 0, 1), now);
+    // v4.1: a ped who just got shot flinches — both hands fly up and the
+    // body leans back for half a second, then the flee takes over.
+    if (p.hurt > 0) {
+      p.parts.armL.rotation.x = -2.1; p.parts.armR.rotation.x = -2.1;
+      p.parts.armL.rotation.z = -0.4; p.parts.armR.rotation.z = 0.4;
+      p.parts.body.rotation.x = -0.3;
+    }
   }
 }

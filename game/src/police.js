@@ -3,7 +3,7 @@
 // EASY (v2): while a story job is active (police.storyMode), the pursuit is
 // capped at 2 cops, slower, and the heat cools off faster.
 import * as THREE from 'three';
-import { clamp, lerp, angleLerp, angleDiff, dist2D } from './util.js';
+import { clamp, lerp, angleLerp, angleDiff, dist2D, resolveCircleOut } from './util.js';
 import { CITY } from './city.js';
 import { buildCarMesh } from './vehicles.js';
 
@@ -50,6 +50,11 @@ function spawnHeli(scene, police) {
   const rotorMat = new THREE.MeshBasicMaterial({ color: 0x111214 });
   const rotor = new THREE.Mesh(new THREE.BoxGeometry(11, 0.08, 0.5), rotorMat);
   rotor.position.y = 1.1; g.add(rotor);
+  // v4.1: a translucent blur disc under the blades — a fast rotor reads as
+  // a spinning disc, not a frozen bar.
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(5.5, 24),
+    new THREE.MeshBasicMaterial({ color: 0x111214, transparent: true, opacity: 0.12, side: THREE.DoubleSide }));
+  disc.rotation.x = -Math.PI / 2; disc.position.y = 1.1; g.add(disc);
   const tailRotor = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.2, 0.4), rotorMat);
   tailRotor.position.set(0.4, 0.4, -6); g.add(tailRotor);
   const spot = new THREE.SpotLight(0xfff2b0, 60, 90, 0.35, 0.5, 1.2);
@@ -68,8 +73,10 @@ function removeHeli(scene, police) {
   police.heli = null; police.heliActive = false;
 }
 
-/** Wanted logic + pursuit. Returns 'busted' | 'wasted' | null. */
-export function updatePolice(police, scene, player, playerCar, now, dt) {
+/** Wanted logic + pursuit. Returns 'busted' | 'wasted' | null.
+ *  v4: cops are solid too — a pursuing car that would cut through a
+ *  building is pushed back out and slowed, so it has to go around. */
+export function updatePolice(police, scene, player, playerCar, now, dt, colliders) {
   const px = player.pos.x, pz = player.pos.z;
   const speed = playerCar ? Math.abs(playerCar.speed) : player.speed;
   // Heat cools off when the player is slow and out of sight of cops —
@@ -107,6 +114,8 @@ export function updatePolice(police, scene, player, playerCar, now, dt) {
     cop.mesh.position.x += Math.sin(cop.heading) * cop.speed * dt;
     cop.mesh.position.z += Math.cos(cop.heading) * cop.speed * dt;
     cop.mesh.rotation.y = cop.heading;
+    // v4: solid city — a cop that clips a building is pushed out and slowed.
+    if (colliders && resolveCircleOut(cop.mesh.position, 1.7, colliders)) cop.speed *= 0.5;
     if (cop.lightBar) cop.lightBar.visible = Math.sin(police.sirenPhase) > 0;
     // Ram: shove the player car and damage the player on foot.
     if (d < 4.5) {
@@ -123,11 +132,16 @@ export function updatePolice(police, scene, player, playerCar, now, dt) {
     if (d > 260) { scene.remove(cop.mesh); police.cops.splice(i, 1); }
   }
   // Helicopter circles overhead and keeps the spotlight on the player.
+  // v4.1: the rotor spins, the body sways on its hover and banks into the
+  // circle — it no longer hangs flat in the sky like a sticker.
   if (police.heli) {
     const h = police.heli;
     h.angle += dt * 0.35;
-    h.mesh.position.set(px + Math.sin(h.angle) * 26, h.height, pz + Math.cos(h.angle) * 26);
+    h.mesh.position.set(px + Math.sin(h.angle) * 26,
+      h.height + Math.sin(now * 0.9) * 1.5, pz + Math.cos(h.angle) * 26);
     h.mesh.rotation.y = Math.atan2(px - h.mesh.position.x, pz - h.mesh.position.z);
+    h.mesh.rotation.z = lerp(h.mesh.rotation.z, -0.14 + Math.sin(now * 0.7) * 0.04, clamp(dt * 3, 0, 1));
+    h.mesh.rotation.x = lerp(h.mesh.rotation.x, Math.sin(now * 0.5) * 0.05, clamp(dt * 3, 0, 1));
     h.rotor.rotation.y += dt * 22;
     h.target.position.set(px - h.mesh.position.x, -h.height, pz - h.mesh.position.z);
     h.spot.target = h.target;

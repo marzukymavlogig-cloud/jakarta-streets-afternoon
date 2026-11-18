@@ -2,13 +2,19 @@
 // golden hour (16:30–17:30). Each shot is the real game running: the same
 // world, the same rules, steered by a small autopilot that drives toward
 // the mission marker and keeps off the sidewalks.
+// v4 adds staged shots for the new work: face (every character has one),
+// collision (a car stopped dead by the Monas base), busy (Sudirman at
+// rush hour) and weapons (Mara firing her rifle on the plaza).
+// v4.1 adds golden: street food at dusk — the smoking carts, the vendor
+// serving a buyer, the crowd on Lapangan Merdeka.
 // ?shot=start|play|chase|mission (with &seed=N) stages that scene,
 // paints it twice and sets window.__shotReady.
 import { dist2D, angleDiff } from './util.js';
 import { addWanted } from './police.js';
 import { startStoryMission } from './missions.js';
 
-export const SHOT_NAMES = ['start', 'play', 'chase', 'mission', 'monas', 'vendors', 'kampung'];
+export const SHOT_NAMES = ['start', 'play', 'chase', 'mission', 'monas', 'vendors', 'kampung',
+  'face', 'collision', 'busy', 'weapons', 'golden'];
 
 /** Place the world for a shot: golden-hour time, weather, wanted level, story. */
 export function placeForShot(G, name) {
@@ -72,6 +78,107 @@ export function placeForShot(G, name) {
     G.camYaw = 0.7;
     G.hud.setObjective('Kampung Melayu — gang sempit, jemuran, kabel semrawut');
     return { seconds: 1.5 };
+  }
+  if (name === 'face') {
+    // v4: faces up close — Mara and two plaza peds facing the camera, so
+    // eyes, brows, nose and mouth read in the frame (front camera). Mara
+    // faces north toward Monas, camera north of her, so the background is
+    // the plaza and its crowd — not the monument's blank wall.
+    G.hour = 16.4; G.weather = 'clear';
+    p.pos.set(0, 0, 30); p.heading = Math.PI;
+    p.inCar = null; p.mesh.visible = true;
+    p.mesh.position.copy(p.pos);
+    G.missions.marker.group.visible = false;
+    G.camMode = 'follow';
+    G.shotFrontCam = true; G.camDist = 4.5;
+    for (const [i, dx] of [[0, -2.4], [1, 2.4]]) {
+      const ped = G.peds[36 + i]; // plaza crowd members, not roamers
+      if (!ped) continue;
+      ped.mesh.position.set(dx, 0, 30);
+      ped.targetX = dx; ped.targetZ = 30; ped.pause = 10;
+      ped.heading = Math.PI; ped.mesh.rotation.y = Math.PI;
+    }
+    G.hud.setObjective('Wajah-wajah Jakarta — Mara dan warga Monas');
+    return { seconds: 1.5 };
+  }
+  if (name === 'collision') {
+    // v4: a sedan drives straight at the Monas base — the v4 wall stops it
+    // dead (bump, shake, sparks) instead of letting it pass through.
+    G.hour = 16.4; G.weather = 'clear';
+    const car = G.traffic.find((c) => c.kind === 'sedan') || G.traffic[0];
+    enterCar(G, car);
+    car.mesh.position.set(0, 0, 42); car.heading = Math.PI; car.speed = 22;
+    car.mesh.rotation.y = car.heading;
+    G.missions.marker.group.visible = false;
+    G.hud.setObjective('TABRAKAN — tembok Monas tidak tembus!');
+    G.camMode = 'chase';
+    G.camDist = 10; // closer chase cam: the stopped car fills the frame
+    G.shotDriveStraight = true;
+    return { seconds: 1.25 }; // freeze just after the first impact, at the steps
+  }
+  if (name === 'busy') {
+    // v4: rush hour on Jl. Sudirman — taxis, a bus, a food truck and a jam
+    // of sedans on the avenue, peds on the sidewalks, neon coming on.
+    G.hour = 16.5; G.weather = 'clear';
+    const car = G.traffic.find((c) => c.kind === 'sedan') || G.traffic[0];
+    enterCar(G, car);
+    car.mesh.position.set(-100, 0, 42.8); car.heading = Math.PI / 2; car.speed = 12;
+    car.mesh.rotation.y = car.heading;
+    // Pack the avenue ahead with a real jam: sedans, a bus and a taxi.
+    const jam = G.traffic.filter((c) => c !== car && c.maxSpeed).slice(0, 7);
+    jam.forEach((c, i) => {
+      c.vertical = false; c.road = 39; c.lane = i % 2 === 0 ? 3.2 : -3.2;
+      c.along = -80 + Math.floor(i / 2) * 26;
+      c.heading = Math.PI / 2; c.speed = 7;
+      c.mesh.position.set(c.along, 0, 46 + c.lane);
+      c.mesh.rotation.y = c.heading;
+    });
+    G.missions.marker.group.visible = false;
+    G.hud.setObjective('Macet sore di Jl. Sudirman');
+    G.camMode = 'chase';
+    G.shotTopSpeed = 8; // crawl in the jam — 29 km/h, not 122
+    return { seconds: 1.5 }; // short: the car stays inside the jam, not past it
+  }
+  if (name === 'weapons') {
+    // v4: Mara on the plaza with her rifle — muzzle flash held for the
+    // frame, peds scattering ahead of her.
+    G.hour = 16.4; G.weather = 'clear';
+    p.pos.set(0, 0, 28); p.heading = Math.PI;
+    p.inCar = null; p.mesh.visible = true;
+    p.mesh.position.copy(p.pos);
+    p.arsenal.rifle = { mag: 30, reserve: 60 };
+    p.weapon = 'rifle';
+    G.missions.marker.group.visible = false;
+    G.camMode = 'follow';
+    G.camYaw = Math.PI; G.camDist = 9;
+    G.shotFlash = true; // hold the muzzle flash for the frozen frame
+    for (const [i, dx] of [[0, -3], [1, 0], [2, 3]]) {
+      const ped = G.peds[26 + i];
+      if (!ped) continue;
+      ped.mesh.position.set(dx, 0, 10 + i * 2);
+      ped.fleeing = 5; ped.targetX = dx; ped.targetZ = -20;
+    }
+    G.hud.setObjective('SENAPAN — Mara menembak di Lapangan Merdeka');
+    return { seconds: 1.5 };
+  }
+  if (name === 'golden') {
+    // v4.1 (ref 2): street food at dusk — Mara walks toward the BAKSO
+    // MALANG cart, its smoke rising; a buyer browses the cart so the vendor
+    // is caught mid-serve; the crowd drifts behind her.
+    G.hour = 17.0; G.weather = 'clear';
+    p.pos.set(30, 0, 20); p.heading = Math.atan2(56 - 30, 0 - 20);
+    p.inCar = null; p.mesh.visible = true;
+    p.mesh.position.copy(p.pos);
+    G.missions.marker.group.visible = false;
+    G.camMode = 'follow';
+    G.camYaw = p.heading; G.camDist = 7;
+    const buyer = G.peds[36];
+    if (buyer) {
+      buyer.mesh.position.set(52, 0, 3);
+      buyer.targetX = 52; buyer.targetZ = 3; buyer.pause = 6; // browsing the bakso cart
+    }
+    G.hud.setObjective('Sore di Lapangan Merdeka — sate & bakso');
+    return { seconds: 1.2 };
   }
   if (name === 'chase') {
     G.hour = 16.5; G.weather = 'clear';
@@ -150,6 +257,9 @@ export function autopilotDrive(G, input, dt) {
   const want = Math.atan2(tx - car.mesh.position.x, tz - car.mesh.position.z);
   const diff = angleDiff(car.heading, want);
   input.forward = true;
+  // v4: a staged shot may cap the cruise speed (the busy shot crawls in the
+  // jam at 8 m/s instead of flooring it to 34).
+  if (G.shotTopSpeed && car.speed >= G.shotTopSpeed) input.forward = false;
   input.back = false;
   input.left = diff > 0.12;
   input.right = diff < -0.12;

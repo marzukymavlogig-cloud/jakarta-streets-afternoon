@@ -2,8 +2,13 @@
 // Sudirman / MH Thamrin avenue, TransJakarta halte, angkot lanes, warung
 // stalls, ruko shophouses, and a golden-hour sky with haze and wet roads
 // after the rain. All original, built on Three.js primitives + canvas textures.
+//
+// v4: every building is a solid collider (no more driving through walls),
+// the Monas plaza slab sits at road height (cars no longer sink 0.6 m),
+// vendors and walking sellers have faces, and Sudirman gets billboards,
+// neon signs and working traffic lights — Los Santos bustle, Jakarta soul.
 import * as THREE from 'three';
-import { mulberry32, rand, pick, clamp, lerp } from './util.js';
+import { mulberry32, rand, pick, clamp, lerp, addFace } from './util.js';
 
 export const CITY = {
   blocks: 9, block: 64, road: 14,
@@ -14,10 +19,10 @@ export const ROAD_Y = 0.02;
 /** Vendor stalls ringing Lapangan Merdeka + the Thamrin avenue (v3).
  *  Shared with player.js so the Monas crowd drifts stall to stall. */
 export const PLAZA_STALLS = [
-  { x: 56, z: 0, type: 'gerobak', label: 'BAKSO', color: '#c23b2e' },
+  { x: 56, z: 0, type: 'gerobak', label: 'BAKSO MALANG', color: '#c23b2e' },
   { x: -56, z: 0, type: 'tenda', label: 'NASI GORENG', color: '#e87a2e' },
   { x: 14, z: 54, type: 'gerobak', label: 'ES TEH MANIS', color: '#4fc2c2' },
-  { x: -14, z: -54, type: 'tenda', label: 'SATE AYAM', color: '#3aa655' },
+  { x: -14, z: -54, type: 'tenda', label: 'SATE MADURA', color: '#3aa655' },
   { x: 54, z: 54, type: 'kakilima', label: 'GORENGAN', color: '#e8b93b' },
   { x: -54, z: 54, type: 'gerobak', label: 'BUAH POTONG', color: '#e87a2e' },
   { x: 54, z: -54, type: 'tenda', label: 'MIE AYAM', color: '#0b5fa5' },
@@ -26,6 +31,7 @@ export const PLAZA_STALLS = [
   { x: -24, z: 64, type: 'tenda', label: 'KETOPRAK', color: '#3aa655' },
   { x: 66, z: -20, type: 'kakilima', label: 'ES CAMPUR', color: '#c23b7a' },
   { x: -66, z: 20, type: 'gerobak', label: 'SOTO', color: '#e8b93b' },
+  { x: 24, z: 64, type: 'tenda', label: 'PECEL LELE', color: '#c23b2e' },
 ];
 /** Walking vendors (penjual keliling) circling the plaza. */
 export const KELILING = [
@@ -72,9 +78,9 @@ function asphaltTexture(rng) {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 256;
   const g = c.getContext('2d');
-  g.fillStyle = '#45484f'; g.fillRect(0, 0, 256, 256);
+  g.fillStyle = '#565a63'; g.fillRect(0, 0, 256, 256);
   for (let i = 0; i < 2600; i++) {
-    const v = 58 + Math.floor(rng() * 42);
+    const v = 78 + Math.floor(rng() * 42);
     g.fillStyle = `rgb(${v},${v + 2},${v + 6})`;
     g.fillRect(rng() * 256, rng() * 256, 2, 2);
   }
@@ -89,17 +95,25 @@ function asphaltTexture(rng) {
 }
 
 function sidewalkTexture(rng) {
+  // v4 (benchmark): warm terracotta-and-cream tiles like a downtown Jakarta
+  // plaza — the reference's patterned paving, not plain grey slabs.
   const c = document.createElement('canvas');
   c.width = 128; c.height = 128;
   const g = c.getContext('2d');
-  g.fillStyle = '#9a938a'; g.fillRect(0, 0, 128, 128);
-  g.strokeStyle = 'rgba(0,0,0,0.25)'; g.lineWidth = 2;
+  const tiles = ['#b0705a', '#d8c0a8', '#a8664f', '#cdb294'];
+  for (let ty = 0; ty < 4; ty++) {
+    for (let tx = 0; tx < 4; tx++) {
+      g.fillStyle = tiles[(tx + ty) % 4];
+      g.fillRect(tx * 32, ty * 32, 32, 32);
+    }
+  }
+  g.strokeStyle = 'rgba(60,30,20,0.35)'; g.lineWidth = 2;
   for (let i = 0; i <= 128; i += 32) {
     g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 128); g.stroke();
     g.beginPath(); g.moveTo(0, i); g.lineTo(128, i); g.stroke();
   }
   for (let i = 0; i < 300; i++) {
-    g.fillStyle = `rgba(0,0,0,${rng() * 0.12})`;
+    g.fillStyle = `rgba(0,0,0,${rng() * 0.1})`;
     g.fillRect(rng() * 128, rng() * 128, 2, 2);
   }
   const tex = new THREE.CanvasTexture(c);
@@ -110,22 +124,57 @@ function sidewalkTexture(rng) {
 }
 
 function glassFacade(rng) {
+  // v4 (benchmark): a fine lit-window grid on blue-green glass, like the
+  // reference towers — 256x512 canvas, small windows, most of them lit in
+  // the afternoon, with a warm sunset reflection band.
   const c = document.createElement('canvas');
-  c.width = 128; c.height = 256;
+  c.width = 256; c.height = 512;
   const g = c.getContext('2d');
-  const grad = g.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, '#7e94a8'); grad.addColorStop(1, '#5a6e80');
-  g.fillStyle = grad; g.fillRect(0, 0, 128, 256);
-  for (let y = 10; y < 246; y += 16) {
-    for (let x = 8; x < 120; x += 14) {
-      const lit = rng() < 0.45;
-      g.fillStyle = lit ? (rng() < 0.5 ? '#ffd98a' : '#bfe6ff') : '#1d2733';
-      g.fillRect(x, y, 9, 11);
+  const grad = g.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, '#6a9a9a'); grad.addColorStop(0.5, '#4a7a8a'); grad.addColorStop(1, '#3a5a6e');
+  g.fillStyle = grad; g.fillRect(0, 0, 256, 512);
+  for (let y = 8; y < 500; y += 14) {
+    for (let x = 6; x < 248; x += 12) {
+      const lit = rng() < 0.55;
+      g.fillStyle = lit ? (rng() < 0.5 ? '#ffd98a' : '#cfeef5') : '#16222e';
+      g.fillRect(x, y, 8, 9);
     }
   }
+  // Vertical mullions between the window columns.
+  g.fillStyle = 'rgba(220,235,240,0.35)';
+  for (let x = 0; x < 256; x += 12) g.fillRect(x, 0, 1, 512);
   // Warm sunset reflection band across the glass.
   g.fillStyle = 'rgba(255,170,90,0.28)';
-  g.fillRect(0, 60, 128, 34);
+  g.fillRect(0, 120, 256, 68);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** v4 (benchmark): ground-floor retail — a shopfront band with readable
+ *  Jakarta shop signs and glass doors, for the podium under each tall tower. */
+function shopfrontTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 128;
+  const g = c.getContext('2d');
+  const shops = [
+    ['KOPI SENJA', '#6a3a1a'], ['SATE 88', '#c23b2e'], ['NASI GORENG', '#e87a2e'],
+    ['ES TEH', '#0b7a7a'], ['PULSA', '#8a4fbf'], ['WARTEG', '#3aa655'],
+  ];
+  shops.forEach(([name, bg], i) => {
+    const x = i * 86;
+    g.fillStyle = bg; g.fillRect(x, 0, 86, 34);
+    g.fillStyle = '#fff'; g.font = 'bold 15px sans-serif'; g.textAlign = 'center';
+    g.fillText(name, x + 43, 23);
+  });
+  // Glass doors + shop windows below the sign band.
+  g.fillStyle = '#9fc4d8'; g.fillRect(0, 34, 512, 94);
+  g.fillStyle = '#2a2e35';
+  for (let x = 8; x < 512; x += 43) g.fillRect(x, 40, 4, 82);
+  for (let x = 20; x < 512; x += 86) {
+    g.fillStyle = '#1d2733'; g.fillRect(x, 46, 52, 70); // door glass
+    g.fillStyle = 'rgba(255,217,138,0.5)'; g.fillRect(x + 4, 50, 44, 20); // lit interior
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -189,24 +238,25 @@ function stripedTexture(colorA, colorB) {
 
 function blueGlassFacade(rng) {
   // Sudirman blue-glass tower: vertical mullions + sky reflection.
+  // v4 (benchmark): same fine lit-window grid as glassFacade, deeper blue.
   const c = document.createElement('canvas');
-  c.width = 128; c.height = 256;
+  c.width = 256; c.height = 512;
   const g = c.getContext('2d');
-  const grad = g.createLinearGradient(0, 0, 0, 256);
+  const grad = g.createLinearGradient(0, 0, 0, 512);
   grad.addColorStop(0, '#4a7a9a'); grad.addColorStop(0.5, '#2e5a7a'); grad.addColorStop(1, '#1d3a52');
-  g.fillStyle = grad; g.fillRect(0, 0, 128, 256);
-  for (let x = 8; x < 128; x += 12) {
-    g.fillStyle = 'rgba(200,225,245,0.5)'; g.fillRect(x, 0, 2, 256);
+  g.fillStyle = grad; g.fillRect(0, 0, 256, 512);
+  for (let x = 8; x < 256; x += 12) {
+    g.fillStyle = 'rgba(200,225,245,0.5)'; g.fillRect(x, 0, 2, 512);
   }
-  for (let y = 10; y < 246; y += 18) {
-    for (let x = 10; x < 120; x += 16) {
-      const lit = rng() < 0.4;
+  for (let y = 8; y < 500; y += 14) {
+    for (let x = 10; x < 248; x += 12) {
+      const lit = rng() < 0.5;
       g.fillStyle = lit ? '#ffd98a' : 'rgba(10,20,30,0.7)';
-      g.fillRect(x, y, 9, 11);
+      g.fillRect(x, y, 8, 9);
     }
   }
   g.fillStyle = 'rgba(255,190,110,0.25)';
-  g.fillRect(0, 40, 128, 26);
+  g.fillRect(0, 80, 256, 52);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -219,6 +269,11 @@ export function createCity(scene, seed) {
   scene.add(group);
   const half = CITY.half;
   const step = CITY.block + CITY.road;
+  // v4: solid-city colliders — one AABB per building, stall, kiosk and the
+  // Monas base, shared with feet, cars, peds and police (util.js resolves
+  // circles against them). The stadium bowl is left out on purpose: its
+  // open cylinder straddles a road, so a box there would block traffic.
+  const colliders = [];
 
   // Ground: built-up Jakarta grey-green beyond the grid, textured asphalt inside.
   const ground = new THREE.Mesh(
@@ -236,7 +291,9 @@ export function createCity(scene, seed) {
   group.add(asphalt);
 
   // Roads: dark strips + centre dashes + zebra crossings on the Sudirman axis.
-  const roadMat = new THREE.MeshPhongMaterial({ color: 0x4a4e57, shininess: 80, specular: 0x667788 });
+  // v4: the asphalt reads lighter in the afternoon sun (the old road went
+  // near-black in tower shadow).
+  const roadMat = new THREE.MeshPhongMaterial({ color: 0x5a5e68, shininess: 80, specular: 0x667788 });
   const dashMat = new THREE.MeshBasicMaterial({ color: 0xd8c25a });
   const roadGeo = new THREE.BoxGeometry(half * 2 + 40, 0.06, CITY.road);
   for (let i = 0; i <= CITY.blocks; i++) {
@@ -329,6 +386,8 @@ export function createCity(scene, seed) {
   }
   const glassSpots = spots.filter((b) => b.dc < 0.55);
   const rukoSpots = spots.filter((b) => b.dc >= 0.55);
+  // v4: every building is solid — feet, cars, peds and cops all bounce off.
+  for (const b of spots) colliders.push({ x: b.x, z: b.z, hx: b.w / 2 + 0.3, hz: b.d / 2 + 0.3 });
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   const col = new THREE.Color();
   function fillInstanced(list, mat, palette, glassy) {
@@ -363,25 +422,60 @@ export function createCity(scene, seed) {
   // real skyline — each one reads as a different building, not a clone.
   const landmarkDefs = [
     { x: -71, z: -71, h: 185, tint: 0x7e94a8, tex: blueGlass },
-    { x: 85, z: -71, h: 150, tint: 0xd8b48a, tex: glass },
+    { x: 85, z: -71, h: 150, tint: 0xd8b48a, tex: glass, curved: true }, // v4.1: Wisma 46 — curved glass tower
     { x: -71, z: 85, h: 165, tint: 0x9fb4c4, tex: blueGlass },
   ];
   for (const lm of landmarkDefs) {
     const lmMat = new THREE.MeshLambertMaterial({ map: lm.tex, color: lm.tint });
     const tiers = [[26, lm.h * 0.55, 0], [20, lm.h * 0.3, lm.h * 0.55], [13, lm.h * 0.15, lm.h * 0.85]];
     for (const [w, h, y0] of tiers) {
-      const tier = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), lmMat);
+      // v4.1: the curved tower is built from cylinders, not boxes — its
+      // round glass shaft reads as Wisma 46 from the avenue.
+      const tier = lm.curved
+        ? new THREE.Mesh(new THREE.CylinderGeometry(w / 2, w / 2, h, 20), lmMat)
+        : new THREE.Mesh(new THREE.BoxGeometry(w, h, w), lmMat);
       tier.position.set(lm.x, 0.3 + y0 + h / 2, lm.z);
       tier.castShadow = true; tier.receiveShadow = true;
       group.add(tier);
+    }
+    if (lm.curved) {
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(16, 3.2),
+        new THREE.MeshBasicMaterial({ map: makeSignTexture('WISMA 46', '#1a2a44', '#9fd8ff', ''), side: THREE.DoubleSide }));
+      sign.position.set(lm.x, 32, lm.z + 13.4); // south face, toward the avenue
+      group.add(sign);
     }
     const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 1.2, 16, 6),
       new THREE.MeshLambertMaterial({ color: 0x44484f }));
     spire.position.set(lm.x, 0.3 + lm.h + 8, lm.z); group.add(spire);
     const crown = new THREE.Mesh(new THREE.SphereGeometry(1.4, 6, 6), beaconMat0());
     crown.position.set(lm.x, 0.3 + lm.h + 17, lm.z); group.add(crown);
+    colliders.push({ x: lm.x, z: lm.z, hx: 13.5, hz: 13.5 }); // landmark base tier is solid
   }
   function beaconMat0() { return new THREE.MeshBasicMaterial({ color: 0xff4444 }); }
+  // v4 (benchmark): ground-floor retail podiums — every tall downtown tower
+  // and each landmark sits on a shopfront podium (KOPI SENJA, SATE 88, ...)
+  // so the street level reads like the reference's CAFE SOL / TACOS row,
+  // not a blank wall meeting the sidewalk.
+  {
+    const shopTex = shopfrontTexture();
+    const shopMat = new THREE.MeshLambertMaterial({ map: shopTex });
+    const podiumTops = new THREE.MeshLambertMaterial({ color: 0x8a7f72 });
+    const podiums = [
+      ...glassSpots.filter((b) => b.h > 70).map((b) => ({ x: b.x, z: b.z, w: b.w, d: b.d })),
+      ...landmarkDefs.map((lm) => ({ x: lm.x, z: lm.z, w: 26, d: 26 })),
+    ];
+    for (const pd of podiums) {
+      const pw = pd.w + 4, pz = pd.d + 4;
+      const base = new THREE.Mesh(new THREE.BoxGeometry(pw, 6, pz), shopMat);
+      base.position.set(pd.x, 0.3 + 3, pd.z);
+      base.castShadow = true; base.receiveShadow = true;
+      group.add(base);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(pw + 0.6, 0.5, pz + 0.6), podiumTops);
+      cap.position.set(pd.x, 0.3 + 6.2, pd.z);
+      group.add(cap);
+      colliders.push({ x: pd.x, z: pd.z, hx: pw / 2 + 0.3, hz: pz / 2 + 0.3 });
+    }
+  }
   // ---- KAMPUNG (v3): dense informal housing on the east side ----
   // Tiny houses crammed along narrow alleys, corrugated-iron roofs in rust
   // and faded paint, laundry lines strung between them, wires tangled
@@ -422,6 +516,7 @@ export function createCity(scene, seed) {
     const wallCols = [0xd8c9a8, 0xc9b48a, 0xb8c9d8, 0xe8d8c9, 0x9a8a6a, 0x7a9a8a, 0xd8b8a8];
     const rq = new THREE.Quaternion(), eul = new THREE.Euler();
     houses.forEach((hs, i) => {
+      colliders.push({ x: hs.x, z: hs.z, hx: hs.w / 2 + 0.2, hz: hs.d / 2 + 0.2 });
       eul.set(0, hs.rot, 0); rq.setFromEuler(eul);
       p.set(hs.x, 0.3, hs.z); s.set(hs.w, hs.h, hs.d);
       m4.compose(p, rq, s); walls.setMatrixAt(i, m4);
@@ -490,6 +585,18 @@ export function createCity(scene, seed) {
   // ---- VENDORS (v3): kaki lima, gerobak, warung tenda, penjual keliling ----
   // Shared geometries/materials so ~15 stalls stay cheap.
   const vendorAnim = [];
+  // v4.1 (ref 2): smoke over the food carts — sate, bakso and pecel lele
+  // steam in the evening air. Each puff rises, grows and fades in a loop.
+  const smokePuffs = [];
+  function addSmoke(parent, x, y, z) {
+    for (let i = 0; i < 4; i++) {
+      const mat = new THREE.MeshBasicMaterial({ color: 0xf2f2f2, transparent: true, opacity: 0.3 });
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 6), mat);
+      puff.position.set(x, y, z);
+      parent.add(puff);
+      smokePuffs.push({ mesh: puff, mat, baseY: y, phase: i / 4 });
+    }
+  }
   const goodGeos = {
     sphere: new THREE.SphereGeometry(0.16, 8, 6),
     box: new THREE.BoxGeometry(0.3, 0.22, 0.3),
@@ -518,6 +625,9 @@ export function createCity(scene, seed) {
   }
   function vendorFigure(shirtHex, skinHex, hijabHex) {
     // Vendor behind a counter: head + torso + waving arm only (legs hidden).
+    // v4: a face — eyes, brows, nose, mouth — so the vendor reads as a
+    // person when Mara walks up to the stall. The hijab is flattened at the
+    // front (z-scale 0.85) so the face sits proud of the scarf, not inside it.
     const g = new THREE.Group();
     const shirt = new THREE.MeshLambertMaterial({ color: shirtHex });
     const skin = new THREE.MeshLambertMaterial({ color: skinHex });
@@ -528,11 +638,13 @@ export function createCity(scene, seed) {
     if (hijabHex) {
       const hj = new THREE.Mesh(new THREE.SphereGeometry(0.295, 12, 10),
         new THREE.MeshLambertMaterial({ color: hijabHex }));
-      hj.position.y = 1.8; g.add(hj);
+      hj.position.y = 1.8; hj.scale.set(1, 1.05, 0.85); g.add(hj);
+      var face = addFace(g, { z: 0.26, skinMat: skin });
     } else {
       const hair = new THREE.Mesh(new THREE.SphereGeometry(0.245, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.55),
         new THREE.MeshLambertMaterial({ color: 0x1c1410 }));
       hair.position.y = 1.82; g.add(hair);
+      var face = addFace(g, { z: 0.205, skinMat: skin });
     }
     const armPivot = new THREE.Group();
     armPivot.position.set(0.33, 1.52, 0);
@@ -541,7 +653,7 @@ export function createCity(scene, seed) {
     g.add(armPivot);
     const arm2 = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.42, 4, 8), shirt);
     arm2.position.set(-0.33, 1.26, 0); g.add(arm2);
-    return { group: g, armPivot, head };
+    return { group: g, armPivot, head, face };
   }
   function addStallSign(stall, label, bg) {
     const board = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.4),
@@ -602,9 +714,17 @@ export function createCity(scene, seed) {
       stall.add(v.group); vendorAnim.push(v);
     }
     addStallSign(stall, sp.label, sp.color);
-    stall.position.set(sp.x, 0.3, sp.z);
+    // v4.1 (ref 2): the food carts steam — smoke over the sate grill, the
+    // bakso pot and the pecel lele stove.
+    if (sp.label === 'SATE MADURA' || sp.label === 'PECEL LELE') addSmoke(stall, 1.4, 1.7, 0.6);
+    if (sp.label === 'BAKSO MALANG') addSmoke(stall, 0, 1.6, 0);
+    // v4: the plaza slab now sits at road height (top 0.06, was 0.6 — cars
+    // used to sink into it), so stalls sit at 0.06 too, and every stall is
+    // solid: nobody walks or drives through a gerobak.
+    stall.position.set(sp.x, 0.06, sp.z);
     stall.rotation.y = face;
     group.add(stall);
+    colliders.push({ x: sp.x, z: sp.z, hx: 2.4, hz: 2.2 });
   }
   // Penjual keliling: walking vendors with a shoulder basket, circling the plaza.
   const kelilingFigs = [];
@@ -619,6 +739,8 @@ export function createCity(scene, seed) {
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.25, 0.1, 10),
       new THREE.MeshLambertMaterial({ color: 0x22242a }));
     cap.position.y = 1.94; fig.add(cap);
+    // v4: the walking sellers have faces too.
+    addFace(fig, { z: 0.205, skinMat: skin });
     for (const side of [-1, 1]) {
       const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.42, 4, 8), shirt);
       arm.position.set(0.33 * side, 1.26, 0); fig.add(arm);
@@ -638,19 +760,47 @@ export function createCity(scene, seed) {
     group.add(fig);
     kelilingFigs.push({ fig, def: k, angle: k.phase, bob: 0 });
   }
-  function updateVendors(dt, now) {
+  /** Vendors call out and serve: when a pedestrian browses a stall, the
+   *  vendor reaches out to them instead of waving at the crowd. */
+  function updateVendors(dt, now, peds) {
     // Stall vendors call out: one arm waves, head turns to the crowd.
     vendorAnim.forEach((v, i) => {
-      v.armPivot.rotation.x = -1.1 + Math.sin(now * 2.2 + i * 1.7) * 0.45;
-      v.armPivot.rotation.z = 0.25;
-      v.head.rotation.y = Math.sin(now * 0.7 + i * 2.3) * 0.5;
+      const sp = PLAZA_STALLS[i];
+      // v4.1: a buyer browsing this stall gets served, not waved at.
+      let buyer = null;
+      if (peds && sp) {
+        let bd = 4.5;
+        for (const p of peds) {
+          const d = Math.hypot(p.mesh.position.x - sp.x, p.mesh.position.z - sp.z);
+          if (d < bd) { bd = d; buyer = p; }
+        }
+      }
+      if (buyer) {
+        v.armPivot.rotation.x = lerp(v.armPivot.rotation.x, -1.5, clamp(dt * 6, 0, 1));
+        v.armPivot.rotation.z = 0.1;
+        v.head.rotation.y = Math.sin(now * 1.3 + i) * 0.35;
+        if (v.face) v.face.rotation.y = v.head.rotation.y;
+      } else {
+        v.armPivot.rotation.x = -1.1 + Math.sin(now * 2.2 + i * 1.7) * 0.45;
+        v.armPivot.rotation.z = 0.25;
+        v.head.rotation.y = Math.sin(now * 0.7 + i * 2.3) * 0.5;
+        if (v.face) v.face.rotation.y = v.head.rotation.y; // the face turns with the head
+      }
     });
+    // v4.1: food smoke rises, grows and fades, one puff after another.
+    for (const s of smokePuffs) {
+      const p = (now * 0.35 + s.phase) % 1;
+      s.mesh.position.y = s.baseY + p * 2.0;
+      const sc = 0.6 + p * 1.1;
+      s.mesh.scale.set(sc, sc, sc);
+      s.mat.opacity = 0.32 * (1 - p);
+    }
     // Keliling vendors walk their slow circle around the plaza.
     for (const k of kelilingFigs) {
       k.angle += k.def.speed * dt;
       const x = Math.cos(k.angle) * k.def.radius;
       const z = Math.sin(k.angle) * k.def.radius;
-      k.fig.position.set(x, 0.3 + Math.abs(Math.sin(now * 5 + k.angle * 10)) * 0.05, z);
+      k.fig.position.set(x, 0.06 + Math.abs(Math.sin(now * 5 + k.angle * 10)) * 0.05, z);
       k.fig.rotation.y = Math.atan2(-Math.sin(k.angle) * Math.sign(k.def.speed), Math.cos(k.angle) * Math.sign(k.def.speed));
     }
   }
@@ -667,16 +817,72 @@ export function createCity(scene, seed) {
   });
 
   // ---- MONAS: the National Monument at the centre of Lapangan Merdeka ----
+  // v4: the plaza slab is a thin plate at road height (top 0.06, flush with
+  // the road strips) — the old 0.6 m box swallowed cars crossing the avenue.
+  // The Monas base is solid: cars and feet stop at its marble wall.
+  // v4 fix: the base is no longer a blank beige box — fluted marble, a gold
+  // MONAS band, a gold trim ring and front steps, so it reads as a monument
+  // instead of a void in the collision/weapons shots.
   const plaza = new THREE.Mesh(
-    new THREE.BoxGeometry(96, 0.6, 96),
+    new THREE.BoxGeometry(96, 0.12, 96),
     new THREE.MeshLambertMaterial({ map: sidewalkTexture(rng) }),
   );
-  plaza.position.set(0, 0.3, 0); plaza.receiveShadow = true; group.add(plaza);
+  plaza.position.set(0, 0, 0); plaza.receiveShadow = true; group.add(plaza);
+  // v4.1 (ref 2): Bundaran HI — a round fountain plaza on the south-east
+  // corner of Lapangan Merdeka, with the Selamat Datang figure on top.
+  // Solid, like everything else in v4: cars and feet stop at its rim.
+  {
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(6, 6.4, 0.5, 20),
+      new THREE.MeshLambertMaterial({ color: 0xcfc8b8 }));
+    rim.position.set(36, 0.31, 36); group.add(rim);
+    const water = new THREE.Mesh(new THREE.CircleGeometry(5.2, 20),
+      new THREE.MeshPhongMaterial({ color: 0x4a90c8, shininess: 120, specular: 0xffe9a8 }));
+    water.rotation.x = -Math.PI / 2; water.position.set(36, 0.58, 36); group.add(water);
+    const column = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, 5, 10),
+      new THREE.MeshLambertMaterial({ color: 0xd8d8d8 }));
+    column.position.set(36, 3, 36); group.add(column);
+    const figure = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.2, 4, 8),
+      new THREE.MeshLambertMaterial({ color: 0x3aa655 }));
+    figure.position.set(36, 6.6, 36); group.add(figure);
+    const figHead = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8),
+      new THREE.MeshLambertMaterial({ color: 0xc98d64 }));
+    figHead.position.set(36, 7.8, 36); group.add(figHead);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(7, 1.8),
+      new THREE.MeshBasicMaterial({ map: makeSignTexture('BUNDARAN HI', '#1a2a44', '#ffd23b', ''), side: THREE.DoubleSide }));
+    sign.position.set(36, 1.6, 42.6); group.add(sign);
+    colliders.push({ x: 36, z: 36, hx: 6.5, hz: 6.5 });
+  }
+  colliders.push({ x: 0, z: 0, hx: 13.3, hz: 16.8 }); // Monas base + front steps
+  const monasTexC = document.createElement('canvas');
+  monasTexC.width = 512; monasTexC.height = 256;
+  {
+    const g2 = monasTexC.getContext('2d');
+    g2.fillStyle = '#d8cfc0'; g2.fillRect(0, 0, 512, 256);
+    for (let x = 0; x < 512; x += 16) {
+      g2.fillStyle = (x / 16) % 2 === 0 ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.10)';
+      g2.fillRect(x, 40, 8, 216);
+    }
+    g2.fillStyle = '#c9a227'; g2.fillRect(0, 0, 512, 40); // gold band at the top
+    g2.fillStyle = '#3a2a00'; g2.font = 'bold 30px sans-serif'; g2.textAlign = 'center';
+    g2.fillText('M O N A S', 256, 29);
+    g2.fillStyle = 'rgba(0,0,0,0.25)'; g2.fillRect(0, 250, 512, 6);
+  }
+  const monasTex = new THREE.CanvasTexture(monasTexC);
+  monasTex.colorSpace = THREE.SRGBColorSpace;
   const monasBase = new THREE.Mesh(
     new THREE.BoxGeometry(26, 14, 26),
-    new THREE.MeshLambertMaterial({ color: 0xd8cfc0 }),
+    new THREE.MeshLambertMaterial({ map: monasTex }),
   );
   monasBase.position.set(0, 7, 0); monasBase.castShadow = true; group.add(monasBase);
+  const monasTrim = new THREE.Mesh(new THREE.BoxGeometry(27, 0.8, 27),
+    new THREE.MeshLambertMaterial({ color: 0xc9a227 }));
+  monasTrim.position.set(0, 13.8, 0); group.add(monasTrim);
+  // Front steps on the south face, ascending toward the base.
+  const stepMat = new THREE.MeshLambertMaterial({ color: 0xc9bfa8 });
+  [[30, 0.25, 16.4], [28, 0.5, 15.2], [26, 0.75, 14.1]].forEach(([w, h, z]) => {
+    const st = new THREE.Mesh(new THREE.BoxGeometry(w, h, 2.6), stepMat);
+    st.position.set(0, 0.06 + h / 2, z); st.receiveShadow = true; group.add(st);
+  });
   const obelisk = new THREE.Mesh(
     new THREE.CylinderGeometry(5.5, 9, 118, 4, 1),
     new THREE.MeshLambertMaterial({ color: 0xf2ead8 }),
@@ -746,10 +952,11 @@ export function createCity(scene, seed) {
   halteSign.position.set(0, 5.6, 0); halte.add(halteSign);
   halte.position.set(12, 0, -52);
   group.add(halte);
+  colliders.push({ x: 12, z: -52, hx: 10.5, hz: 3.5 }); // halte shelter is solid
 
   // ---- Warung stalls on sidewalk blocks (block-centre coords, never on a road) ----
   const warungSpots = [
-    [-71, -71, 'WARUNG KOPI', '#c23b2e'], [85, 85, 'NASI GORENG', '#e87a2e'],
+    [-227, -71, 'WARUNG KOPI', '#c23b2e'], [85, 85, 'NASI GORENG', '#e87a2e'],
     [-149, 163, 'SATE AYAM', '#3aa655'], [163, -71, 'BAKSO', '#0b5fa5'],
     [85, -149, 'GORENGAN', '#e8b93b'], [-149, 85, 'ES TEH', '#4fc2c2'],
   ];
@@ -772,6 +979,102 @@ export function createCity(scene, seed) {
     stall.position.set(wx, 0.3, wz);
     stall.rotation.y = (wx + wz) % 2 === 0 ? 0 : Math.PI / 2;
     group.add(stall);
+    colliders.push({ x: wx, z: wz, hx: 2.5, hz: 2.0 }); // warung counter is solid
+  }
+
+  // ---- v4: LOS SANTOS BUSTLE, JAKARTA SOUL ----
+  // Big billboards on the Sudirman towers + one freestanding roadside board,
+  // neon shop signs on street corners, and working traffic lights at four
+  // busy intersections. All fictional brands — the bustle is the reference,
+  // not a setting change: Monas, kampung, warung and rupiah stay.
+  const BILLBOARDS = [
+    { text: 'KOPI SENJA', sub: 'Nikmatnya sore Jakarta', bg: '#6a3a1a', x: -71, y: 42, z: -57.6, ry: 0 },
+    { text: 'SATE 88', sub: 'Buka sampai tengah malam', bg: '#c23b2e', x: 71.6, y: 38, z: -71, ry: -Math.PI / 2 },
+    { text: 'NASI GORENG', sub: 'Pedasnya nendang', bg: '#e87a2e', x: -71, y: 46, z: 71.6, ry: Math.PI },
+    { text: 'PULSA MURAH', sub: 'Semua operator — 24 jam', bg: '#0b5fa5', x: 76, y: 9, z: 96, ry: Math.PI },
+  ];
+  for (const b of BILLBOARDS) {
+    // v4: the freestanding board is smaller (16 m) and set back from the
+    // avenue so it no longer covers the HUD cash in the driving shots.
+    // v4.1: set back to z=96, deep in the block — even its corner no longer
+    // intrudes into the chase camera's frame on the avenue.
+    const bw = b.x === 76 ? 16 : 22, bh = b.x === 76 ? 6 : 8.25;
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh),
+      new THREE.MeshBasicMaterial({ map: makeSignTexture(b.text, b.bg, '#ffffff', b.sub), side: THREE.DoubleSide }));
+    board.position.set(b.x, b.y, b.z); board.rotation.y = b.ry; group.add(board);
+    if (b.x === 76) {
+      // Freestanding board: two posts down to the sidewalk.
+      for (const px of [-7, 7]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 8, 6),
+          new THREE.MeshLambertMaterial({ color: 0x44484f }));
+        post.position.set(b.x + px, 4, b.z); group.add(post);
+      }
+    }
+  }
+  // Neon signs: bright unlit planes that read as glowing shop signs at dusk.
+  const NEON = [
+    { text: 'KOPI', bg: '#ff2e88', x: -32, z: 40, ry: 0 },
+    { text: 'SATE', bg: '#ff7a00', x: 52, z: -32, ry: Math.PI / 2 },
+    { text: '24 JAM', bg: '#00c2c2', x: -110, z: 52, ry: 0 },
+    { text: 'PULSA', bg: '#b83bff', x: 124, z: -38, ry: -Math.PI / 2 },
+    { text: 'ES TEH', bg: '#37c978', x: 40, z: 124, ry: Math.PI },
+    { text: 'DANGDUT', bg: '#ffd23b', x: -38, z: -116, ry: Math.PI / 2 },
+  ];
+  const neonMats = [];
+  for (const n of NEON) {
+    const mat = new THREE.MeshBasicMaterial({
+      map: makeSignTexture(n.text, n.bg, '#ffffff', ''), side: THREE.DoubleSide,
+      transparent: true, opacity: 1,
+    });
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.6), mat);
+    sign.position.set(n.x, 6.2, n.z); sign.rotation.y = n.ry; group.add(sign);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 6.2, 5),
+      new THREE.MeshLambertMaterial({ color: 0x44484f }));
+    pole.position.set(n.x, 3.1, n.z); group.add(pole);
+    neonMats.push(mat);
+  }
+  // Traffic lights at four intersections: one head each, cycling green →
+  // yellow → red on a 12 s loop (opposite phases on the two axes).
+  const LIGHTS = [
+    { x: -27, z: 51, ry: Math.PI }, { x: -27, z: -105, ry: 0 },
+    { x: 129, z: 51, ry: Math.PI }, { x: 129, z: -27, ry: Math.PI / 2 },
+  ];
+  const trafficLights = [];
+  const bulbOn = { red: 0xff2a2a, yellow: 0xffc93b, green: 0x37e06a };
+  const bulbOff = { red: 0x3a0d0d, yellow: 0x3a2d0d, green: 0x0d2a16 };
+  for (const L of LIGHTS) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 6.4, 5),
+      new THREE.MeshLambertMaterial({ color: 0x22242a }));
+    pole.position.set(L.x, 3.2, L.z); group.add(pole);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.8, 0.7),
+      new THREE.MeshLambertMaterial({ color: 0x111214 }));
+    box.position.set(L.x, 6.6, L.z); box.rotation.y = L.ry; group.add(box);
+    const bulbs = {};
+    for (const [key, dy] of [['red', 1], ['yellow', 0], ['green', -1]]) {
+      const mat = new THREE.MeshBasicMaterial({ color: bulbOff[key] });
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), mat);
+      bulb.position.set(L.x, 6.6 + dy * 0.85, L.z);
+      // Push the bulb just out of the box face it points to.
+      bulb.position.x += Math.sin(L.ry) * 0.4;
+      bulb.position.z += Math.cos(L.ry) * 0.4;
+      group.add(bulb);
+      bulbs[key] = mat;
+    }
+    trafficLights.push(bulbs);
+  }
+  /** v4 city life, called every step: traffic-light cycle + neon flicker. */
+  function updateCityLife(dt, now) {
+    const t = now % 12;
+    const phase = t < 5 ? 'green' : t < 6 ? 'yellow' : 'red';
+    for (const bulbs of trafficLights) {
+      for (const key of ['red', 'yellow', 'green']) {
+        bulbs[key].color.setHex(phase === key ? bulbOn[key] : bulbOff[key]);
+      }
+    }
+    neonMats.forEach((mat, i) => {
+      // One sign buzzes: a soft flicker, never fully dark.
+      mat.opacity = 0.82 + 0.18 * Math.sin(now * 2.6 + i * 2.1);
+    });
   }
 
   // Trees: trembesi canopies along the avenue + palms kept near the river.
@@ -780,11 +1083,14 @@ export function createCity(scene, seed) {
   const leafMat2 = new THREE.MeshLambertMaterial({ color: 0x5aa844 });
   const treeCount = 150;
   const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.35, 0.6, 7, 6), trunkMat, treeCount);
-  const canopies = new THREE.InstancedMesh(new THREE.SphereGeometry(3.2, 8, 6), leafMat, treeCount);
-  const canopies2 = new THREE.InstancedMesh(new THREE.SphereGeometry(2.2, 8, 6), leafMat2, treeCount);
+  const canopies = new THREE.InstancedMesh(new THREE.SphereGeometry(2.8, 8, 6), leafMat, treeCount);
+  const canopies2 = new THREE.InstancedMesh(new THREE.SphereGeometry(2.0, 8, 6), leafMat2, treeCount);
   for (let i = 0; i < treeCount; i++) {
     const along = rand(rng, -half, half);
-    const lane = pick(rng, [-1, 1]) * (CITY.road / 2 + 2);
+    // v4.1: trees sit 13 m off the road centre (was 9, then 11) — deep
+    // enough on the sidewalk that neither trunk nor canopy fills the chase
+    // camera's frame when it drives the avenue; canopies are smaller too.
+    const lane = pick(rng, [-1, 1]) * (CITY.road / 2 + 6);
     const vertical = rng() < 0.5;
     const x = vertical ? along : pick(rng, [-half, half]) + (rng() < 0.5 ? -1 : 1) * (CITY.block / 2);
     const z = vertical ? lane + Math.floor(rand(rng, 0, CITY.blocks)) * step - half : along;
@@ -796,6 +1102,9 @@ export function createCity(scene, seed) {
   trunks.castShadow = true; canopies.castShadow = true;
   group.add(trunks); group.add(canopies); group.add(canopies2);
   // Lamps.
+  // v4.1: lamps stand mid-block on the sidewalk (road centre ± 11), never
+  // at a corner on the avenue strip — the old corner placement put a pole
+  // 3 m from the chase camera in the driving shots.
   const lampMat = new THREE.MeshLambertMaterial({ color: 0x44484f });
   const lampGeo = new THREE.CylinderGeometry(0.12, 0.12, 7, 5);
   const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffe9a8 });
@@ -803,8 +1112,9 @@ export function createCity(scene, seed) {
   const lamps = new THREE.InstancedMesh(lampGeo, lampMat, lampCount);
   const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 6, 6), bulbMat, lampCount);
   for (let i = 0; i < lampCount; i++) {
-    const gx = -half + Math.floor(rand(rng, 0, CITY.blocks + 1)) * step;
-    const gz = rand(rng, -half, half);
+    const gx = -half + Math.floor(rand(rng, 0, CITY.blocks + 1)) * step + CITY.road / 2
+      + pick(rng, [-1, 1]) * (CITY.road / 2 + 4);
+    const gz = -half + Math.floor(rand(rng, 0, CITY.blocks)) * step + CITY.road + 10 + rand(rng, 0, CITY.block - 20);
     p.set(gx, 3.5, gz); s.set(1, 1, 1); m4.compose(p, q, s); lamps.setMatrixAt(i, m4);
     p.y = 7.1; m4.compose(p, q, s); bulbs.setMatrixAt(i, m4);
   }
@@ -889,7 +1199,9 @@ export function createCity(scene, seed) {
   scene.add(rain);
 
   return {
-    group, sky, skyMat, sun, sunLight, hemi, rain, updateVendors,
+    group, sky, skyMat, sun, sunLight, hemi, rain, updateVendors, updateCityLife,
+    vendorAnim, // v4.1: exposed so the playtest can watch the serve gesture
+    colliders, // v4: solid-city AABBs for feet, cars, peds and police
     /** hour 0..24, weather 'clear'|'rain'|'fog'. Golden-hour afternoon by default. */
     updateSky(hour, weather) {
       const t = (hour - 6) / 12; // 0 at dawn, 1 at dusk (sunset ~18:00)

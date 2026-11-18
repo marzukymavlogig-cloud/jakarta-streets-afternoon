@@ -1,6 +1,9 @@
 // JAKARTA — Streets of the Afternoon, a gta6-01 entry (Node 22, standard library only).
 // v2: the city is Jakarta, the economy is rupiah, the default hour is the golden
-// afternoon (16:30). The program hands the game in: it copies this repository's
+// afternoon (16:30). v4: faces for every character, solid buildings, a CJ-style
+// arsenal, Los Santos bustle (denser traffic, honking, billboards, neon,
+// traffic lights), and the visual benchmark's glass towers with retail podiums.
+// The program hands the game in: it copies this repository's
 // game/ and screenshots/ beside this file to /output and writes
 // /output/dossier.json with the vendored make.fun library, exactly as the kit's
 // starter does. Outside the grader, MAKEFUN_OUTPUT_DIR stands in for /output:
@@ -18,7 +21,7 @@ mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });
 if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
-console.log(`JAKARTA v3: handing in game/ + screenshots/ to ${out}`);
+console.log(`JAKARTA v4: handing in game/ + screenshots/ to ${out}`);
 
 // The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes;
 // the others refuse an entry the scorer would refuse (more than 4 screenshots or

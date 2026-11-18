@@ -1,7 +1,9 @@
 // hud.js — the JAKARTA heads-up display: rupiah cash, health, wanted stars,
 // speed, clock, radio + DJ chatter, objective, toasts, and the 2D minimap
 // canvas (roads, Monas, marker, cops, heli, traffic).
+// v4: the weapon line — current gun and mag/reserve ammo, CJ-style.
 import { clamp, formatRp } from './util.js';
+import { WEAPONS, WEAPON_ORDER } from './player.js';
 import { CITY } from './city.js';
 
 export function createHud(G) {
@@ -9,15 +11,42 @@ export function createHud(G) {
   const els = {
     cash: $('hud-cash'), health: $('hud-health'), healthBar: $('health-fill'),
     stars: $('hud-stars'), speed: $('hud-speed'), clock: $('hud-clock'),
-    radio: $('hud-radio'), dj: $('hud-dj'), objective: $('hud-objective'), timer: $('hud-timer'),
+    radio: $('hud-radio'), dj: $('hud-dj'), objective: $('hud-objective-text'), timer: $('hud-timer'),
     toast: $('toast'), toastTitle: $('toast-title'), toastText: $('toast-text'),
     minimap: $('minimap'), hint: $('hud-hint'), weather: $('hud-weather'),
+    weapon: $('hud-weapon'), slots: $('hud-slots'),
+    missionBar: $('hud-mission-bar'), missionFill: $('hud-mission-fill'), missionPct: $('hud-mission-pct'),
+    subtitle: $('subtitle'), subtitleFace: $('subtitle-face'),
+    subtitleName: $('subtitle-name'), subtitleText: $('subtitle-text'),
   };
   const ctx = els.minimap.getContext('2d');
   let toastUntil = 0;
   let djUntil = 0;
+  let subtitleUntil = 0;
+  // v4.1 (ref 2): the four weapon slots, built once, lit up in update().
+  const slotEls = WEAPON_ORDER.map((key) => {
+    const s = document.createElement('span');
+    s.className = 'slot';
+    s.textContent = `${WEAPON_ORDER.indexOf(key) + 1} ${WEAPONS[key].name}`;
+    els.slots.appendChild(s);
+    return s;
+  });
   const hud = {
     setObjective(text) { els.objective.textContent = text; },
+    /** v4 (benchmark): a GTA-style dialogue subtitle at the bottom centre,
+     *  e.g. MARA: "Akhirnya pulang." — shown for ~7 s when a job starts. */
+    subtitle(name, text, ms = 7000) {
+      if (!els.subtitle) return;
+      els.subtitleName.textContent = name + ':';
+      els.subtitleText.textContent = ' ' + text;
+      // v4.1 (ref 2): the speaker's portrait badge — initial on a colour.
+      if (els.subtitleFace) {
+        els.subtitleFace.textContent = name.charAt(0);
+        els.subtitleFace.style.background = name === 'MARA' ? '#d84a4a' : '#2e8f8f';
+      }
+      els.subtitle.classList.add('show');
+      subtitleUntil = performance.now() + ms;
+    },
     setTimer(sec) {
       els.timer.textContent = sec > 0 ? `⏱ ${Math.ceil(sec)}s` : '';
     },
@@ -44,10 +73,43 @@ export function createHud(G) {
       els.stars.classList.toggle('hot', G.police.wanted > 0);
       const kmh = p.inCar ? Math.abs(p.inCar.speed) * 3.6 : p.speed * 3.6;
       els.speed.textContent = Math.round(kmh) + ' km/h';
+      // v4: weapon line — gun name + clip/reserve, or fists.
+      if (els.weapon) {
+        if (p.weapon && p.weapon !== 'fists' && p.arsenal[p.weapon]) {
+          const w = p.arsenal[p.weapon];
+          els.weapon.textContent = `${WEAPONS[p.weapon].name}  ${w.mag} / ${w.reserve}`
+            + (p.reloadCd > 0 ? '  — ISI ULANG…' : '');
+        } else {
+          els.weapon.textContent = 'TANGAN KOSONG  ·  1–4 ganti senjata';
+        }
+      }
+      // v4.1 (ref 2): weapon slots — owned guns lit, the active one gold.
+      WEAPON_ORDER.forEach((key, i) => {
+        const owned = !!p.arsenal[key];
+        slotEls[i].classList.toggle('owned', owned);
+        slotEls[i].classList.toggle('active', owned && p.weapon === key);
+      });
+      // v4.1 (ref 2): mission progress — the bar fills as the job's steps
+      // complete, with a percent like the reference's "MELARIKAN DIRI (68%)".
+      if (els.missionBar) {
+        const m = G.missions;
+        const active = m.active;
+        if (active) {
+          const frac = m.stepIndex / Math.max(1, active.def.steps.length);
+          els.missionBar.style.display = 'block';
+          els.missionFill.style.width = Math.round(frac * 100) + '%';
+          els.missionPct.textContent = Math.round(frac * 100) + '%';
+        } else {
+          els.missionBar.style.display = 'none';
+        }
+      }
       const h = Math.floor(G.hour), mi = Math.floor((G.hour - h) * 60);
       els.clock.textContent = `${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}`;
       if (toastUntil && performance.now() > toastUntil) {
         els.toast.classList.remove('show'); toastUntil = 0;
+      }
+      if (subtitleUntil && performance.now() > subtitleUntil) {
+        els.subtitle.classList.remove('show'); subtitleUntil = 0;
       }
       // Rotate the DJ chatter line every ~20 s while driving around Jakarta.
       if (djUntil && performance.now() > djUntil) {

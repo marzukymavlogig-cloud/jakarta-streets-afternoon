@@ -1,6 +1,7 @@
 // save.js — localStorage save for JAKARTA: rupiah cash, health, story
 // progress, owned cars, garage, and the time of day. Save early, save often.
 // v2 key: the Jakarta save does not pick up the old Solmara v1 save.
+// v4: Mara's arsenal (weapons + ammo) is saved too.
 export const SAVE_KEY = 'jakarta-save-v1';
 
 export function createSave() {
@@ -16,6 +17,8 @@ export function createSave() {
           hour: G.hour,
           weather: G.weather,
           x: G.player.pos.x, z: G.player.pos.z,
+          weapon: G.player.weapon,
+          arsenal: G.player.arsenal,
           savedAt: Date.now(),
         };
         window.localStorage.setItem(SAVE_KEY, JSON.stringify(data));
