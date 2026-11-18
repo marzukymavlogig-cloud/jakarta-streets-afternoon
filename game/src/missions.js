@@ -96,7 +96,7 @@ export function createMarker(scene) {
 export function createMissions(scene) {
   return {
     storyIndex: 0, stepIndex: 0, active: null, timer: 0,
-    gig: null, gigCd: 0, passenger: null, heistCar: null,
+    gig: null, gigCd: 30, passenger: null, heistCar: null,
     marker: createMarker(scene),
     storyDone: false,
     owned: [], // bought cars
@@ -154,10 +154,17 @@ function finishMission(G, reward, text) {
   G.save.save(G);
 }
 
-/** Start the next story job on demand (M key) so the player controls the pace. */
+/** Start the next story job on demand (M key) so the player controls the pace.
+ *  A running gig is cancelled first — the story always wins. */
 export function startNextStory(G) {
   const m = G.missions;
-  if (m.active || m.storyDone || m.storyIndex >= STORY.length) return false;
+  if (m.storyDone || m.storyIndex >= STORY.length) return false;
+  if (m.active && m.active.kind === 'story') return false;
+  if (m.active && m.active.kind === 'gig') {
+    if (m.passenger) { G.scene.remove(m.passenger.mesh); m.passenger = null; }
+    m.active = null; m.gigCd = 45;
+    G.hud.toast('GIG DROPPED', 'The story comes first.');
+  }
   startStoryMission(G, m.storyIndex);
   return true;
 }

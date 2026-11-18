@@ -89,6 +89,7 @@ export function updateTraffic(cars, playerPos, dt) {
   const half = CITY.half;
   const step = CITY.block + CITY.road;
   for (const car of cars) {
+    if (!car.maxSpeed) continue; // parked / owned cars stay put
     // Slow for the player / a car ahead on the same lane.
     let target = car.maxSpeed;
     for (const other of cars) {
