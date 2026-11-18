@@ -1,334 +1,270 @@
-// vehicles.js — cars of Jakarta: boxy original builds, arcade driving,
-// and traffic that follows the street grid — sedans, pickups, TransJakarta
-// buses and teal angkot minivans. All original.
+// vehicles.js — cars, buses, angkot, bajaj and food trucks, plus the arcade
+// driving model: throttle, handbrake, steering that yaws the front wheels,
+// body roll on turns, nose dive under the handbrake and suspension bob.
+// Traffic cars cruise the grid roads; the player's car is solid against the
+// city (resolveCircleOut) and takes damage on hard bumps.
 import * as THREE from 'three';
-import { mulberry32, rand, pick, clamp, lerp, angleLerp, angleDiff, dist2D, circleHitsColliders, resolveCircleOut } from './util.js';
-import { CITY, nearestRoadCoord, isOnRoad } from './city.js';
+import { clamp, lerp, damp, pick, range, rangeInt, signTexture, resolveCircleOut } from './util.js';
 
-export const CAR_COLORS = [0xc23b2e, 0x2e6fc2, 0xe8b93b, 0x3aa655, 0xe8e4da, 0x22242a, 0x8a4fbf, 0xe87a2e, 0x4fc2c2];
-export const CAR_NAMES = ['Comet', 'Dune', 'Vagabond', 'Falcon', 'Pinto', 'Cruiser', 'Lowrider', 'Pickup', 'Van'];
-export const BUS_COLORS = [0xe87a2e, 0xc23b2e]; // TransJakarta orange-red
-export const ANGKOT_COLORS = [0x2e8f8f, 0x3aa655, 0xe8b93b]; // teal / green / yellow minivans
-// v4.1 (ref 2): Jakarta plates — the hero car wears B 1001 JKT.
-const PLATES = ['B 2045 JKT', 'B 7788 JKT', 'B 1234 JKT', 'B 5678 JKT', 'B 9012 JKT', 'B 3456 JKT'];
-const plateTexCache = {};
-function plateTexture(text) {
-  if (plateTexCache[text]) return plateTexCache[text];
-  const c = document.createElement('canvas');
-  c.width = 256; c.height = 64;
-  const g = c.getContext('2d');
-  g.fillStyle = '#f2f2f2'; g.fillRect(0, 0, 256, 64);
-  g.strokeStyle = '#1a1a1a'; g.lineWidth = 6; g.strokeRect(3, 3, 250, 58);
-  g.fillStyle = '#1a1a1a'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.font = 'bold 40px sans-serif'; g.fillText(text, 128, 34);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  plateTexCache[text] = tex;
-  return tex;
+export function makePlate(rng) {
+  const n = rangeInt(rng, 100, 9999);
+  return `B ${n} ${pick(rng, ['JKT', 'BGR', 'BDG', 'SBY'])}`;
 }
 
-/** Build a stylised vehicle from boxes. `police` adds a light bar. Kinds:
- *  sedan | pickup | van | bus (long TransJakarta) | angkot (small minivan)
- *  | taxi (yellow, roof sign) | foodtruck (bright kitchen truck, v4)
- *  | bajaj (blue three-wheel auto-rickshaw, v4.1). */
-export function buildCarMesh(color, kind = 'sedan', police = false, plate = null) {
+function wheelMesh(r = 0.36) {
   const g = new THREE.Group();
-  const bodyMat = new THREE.MeshLambertMaterial({ color });
-  const darkMat = new THREE.MeshLambertMaterial({ color: 0x1a2028 });
-  const len = kind === 'bus' ? 8.4 : kind === 'foodtruck' ? 5.6 : kind === 'angkot' ? 3.6
-    : kind === 'bajaj' ? 2.6 : kind === 'van' ? 5.2 : 4.4;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(kind === 'bajaj' ? 1.5 : 2.1,
-    kind === 'bus' || kind === 'foodtruck' ? 1.5 : kind === 'bajaj' ? 0.9 : 0.65, len), bodyMat);
-  body.position.y = kind === 'bus' || kind === 'foodtruck' ? 1.35 : kind === 'bajaj' ? 0.6 : 0.65; g.add(body);
-  if (kind === 'bajaj') {
-    // v4.1 (ref 2): blue auto-rickshaw — yellow canopy roof, open sides,
-    // one front wheel, two at the back.
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 2.4),
-      new THREE.MeshLambertMaterial({ color: 0xe8b93b }));
-    roof.position.y = 1.55; g.add(roof);
-    const shield = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.5, 0.08), darkMat);
-    shield.position.set(0, 1.15, 1.15); g.add(shield);
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 0.8), darkMat);
-    seat.position.set(0, 0.95, -0.3); g.add(seat);
-  } else if (kind === 'foodtruck') {
-    // v4 (benchmark): a kitchen truck — serving window, awning stripe, roof sign.
-    const win = new THREE.Mesh(new THREE.BoxGeometry(2.16, 0.7, 3.2), darkMat);
-    win.position.y = 1.7; g.add(win);
-    const awn = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.25, 5.6),
-      new THREE.MeshLambertMaterial({ color: 0xe8b93b }));
-    awn.position.y = 2.25; g.add(awn);
-    const sign = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 0.3),
-      new THREE.MeshLambertMaterial({ color: 0xf2ead8 }));
-    sign.position.set(0, 2.5, 0); g.add(sign);
-  } else if (kind === 'taxi') {
-    // v4 (benchmark): yellow cab — black band + white roof sign, GTA-style.
-    const band = new THREE.Mesh(new THREE.BoxGeometry(2.12, 0.14, len),
-      new THREE.MeshLambertMaterial({ color: 0x111214 }));
-    band.position.y = 0.95; g.add(band);
-    const sign = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.2, 0.4),
-      new THREE.MeshLambertMaterial({ color: 0xf2ead8 }));
-    sign.position.set(0, 1.55, 0.1); g.add(sign);
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.55, 2.2), darkMat);
-    cabin.position.set(0, 1.15, 0.1); g.add(cabin);
-  } else if (kind === 'bus') {
-    // TransJakarta: big windows band + orange stripe, "TRANSJAKARTA" feel via stripe.
-    const glass = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.9, len - 1), darkMat);
-    glass.position.y = 2.2; g.add(glass);
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.16, 0.3, len),
-      new THREE.MeshLambertMaterial({ color: 0xffd23b }));
-    stripe.position.y = 1.35; g.add(stripe);
-  } else if (kind === 'angkot') {
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.8, 2.6), darkMat);
-    cabin.position.set(0, 1.3, 0); g.add(cabin);
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.22, 3.6),
-      new THREE.MeshLambertMaterial({ color: 0xffd23b }));
-    stripe.position.y = 0.95; g.add(stripe);
-  } else {
-    const cabinH = kind === 'van' ? 1.0 : 0.55;
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, cabinH, kind === 'van' ? 3.4 : 2.2), darkMat);
-    cabin.position.set(0, 1.15, kind === 'pickup' ? -0.7 : 0.1); g.add(cabin);
-  }
-  if (kind === 'pickup') {
-    const bed = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.4, 1.6), bodyMat);
-    bed.position.set(0, 1.0, 1.3); g.add(bed);
-  }
-  const wheelGeo = new THREE.CylinderGeometry(kind === 'bus' ? 0.5 : 0.38, kind === 'bus' ? 0.5 : 0.38, 0.3, 10);
-  const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111214 });
-  const wheelPos = kind === 'bus'
-    ? [[-0.95, -3.2], [0.95, -3.2], [-0.95, 0.6], [0.95, 0.6], [-0.95, 3.2], [0.95, 3.2]]
-    : kind === 'bajaj'
-      ? [[0, 1.0], [-0.62, -0.9], [0.62, -0.9]]
-      : [[-0.95, -1.45], [0.95, -1.45], [-0.95, 1.45], [0.95, 1.45]];
-  const wheels = [];
-  // v4.1: front wheels sit on steer pivots so they yaw with the steering
-  // (driveCar sets pivot.rotation.y); rear wheels stay fixed.
+  const tyre = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.24, 12),
+    new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.95 }));
+  tyre.rotation.z = Math.PI / 2;
+  g.add(tyre);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.5, r * 0.5, 0.26, 8),
+    new THREE.MeshStandardMaterial({ color: 0xbbbbbb, metalness: 0.7, roughness: 0.35 }));
+  hub.rotation.z = Math.PI / 2;
+  g.add(hub);
+  return g;
+}
+
+function plateMesh(text, rng) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.28),
+    new THREE.MeshBasicMaterial({ map: signTexture(text, '#f2f2f2', '#111111') }));
+  return m;
+}
+
+// Build one vehicle. Returns { kind, mesh, body, steerWheels, speed, heading,
+// maxSpeed, hp, plate, owned, color }.
+export function buildCar(kind, color, rng, opts = {}) {
+  const g = new THREE.Group();
+  const body = new THREE.Group();
+  g.add(body);
+  const paint = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.45 });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x1a2a3a, roughness: 0.15, metalness: 0.6 });
   const steerWheels = [];
-  for (const [wx, wz] of wheelPos) {
-    const w = new THREE.Mesh(wheelGeo, wheelMat);
-    w.rotation.z = Math.PI / 2;
-    w.position.set(wx, kind === 'bus' ? 0.5 : kind === 'bajaj' ? 0.32 : 0.38, wz);
-    if (wz > 0) {
-      const pivot = new THREE.Group();
-      pivot.position.copy(w.position);
-      w.position.set(0, 0, 0);
-      pivot.add(w); g.add(pivot); steerWheels.push(pivot);
-    } else { g.add(w); }
-    wheels.push(w);
+  let len = 4.4, wid = 1.9, bodyH = 0.75, bodyY = 0.62, cabH = 0.6;
+
+  if (kind === 'bus') { len = 11; wid = 2.5; bodyH = 2.2; bodyY = 1.5; cabH = 0; }
+  else if (kind === 'angkot') { len = 4.6; wid = 1.9; bodyH = 1.5; bodyY = 1.0; cabH = 0.5; }
+  else if (kind === 'van' || kind === 'foodtruck') { len = 5.4; wid = 2.1; bodyH = 1.7; bodyY = 1.1; cabH = 0.5; }
+  else if (kind === 'pickup') { len = 4.8; wid = 2.0; bodyH = 0.8; bodyY = 0.7; cabH = 0.55; }
+  else if (kind === 'bajaj') { len = 2.6; wid = 1.4; bodyH = 1.0; bodyY = 0.75; cabH = 0.7; }
+
+  const main = new THREE.Mesh(new THREE.BoxGeometry(wid, bodyH, len), paint);
+  main.position.y = bodyY; main.castShadow = true;
+  body.add(main);
+  if (cabH > 0) {
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(wid * 0.88, cabH, len * 0.45), glass);
+    cab.position.set(0, bodyY + bodyH / 2 + cabH / 2 - 0.05, -len * 0.08);
+    cab.castShadow = true;
+    body.add(cab);
   }
-  // v4.1 (ref 2): Jakarta plates, front and rear.
-  const plateText = plate ?? PLATES[Math.floor(Math.random() * PLATES.length)];
-  g.userData.plate = plateText;
-  const plateMat = new THREE.MeshBasicMaterial({ map: plateTexture(plateText) });
-  for (const pz of [len / 2 + 0.03, -len / 2 - 0.03]) {
-    const pl = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.18), plateMat);
-    pl.position.set(0, kind === 'bus' ? 1.1 : 0.55, pz);
-    if (pz < 0) pl.rotation.y = Math.PI;
-    g.add(pl);
+  if (kind === 'bus') {
+    // yellow stripe + big windows
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(wid + 0.04, 0.35, len), new THREE.MeshStandardMaterial({ color: 0xffcc22 }));
+    stripe.position.y = 1.1; body.add(stripe);
+    const win = new THREE.Mesh(new THREE.BoxGeometry(wid + 0.06, 0.7, len * 0.85), glass);
+    win.position.y = 2.0; body.add(win);
+    const dest = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.6),
+      new THREE.MeshBasicMaterial({ map: signTexture(opts.route || 'TRANSJAKARTA', '#111111', '#ffcc22') }));
+    dest.position.set(0, 2.4, len / 2 + 0.03); body.add(dest);
   }
-  const lightMat = new THREE.MeshBasicMaterial({ color: 0xfff2b0 });
-  const front = len / 2 + 0.02;
-  for (const sx of [-0.6, 0.6]) {
-    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.18, 0.1), lightMat);
-    hl.position.set(sx, kind === 'bus' ? 1.1 : 0.75, front); g.add(hl);
-    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.18, 0.1),
-      new THREE.MeshBasicMaterial({ color: 0xff2a2a }));
-    tl.position.set(sx, kind === 'bus' ? 1.1 : 0.75, -front); g.add(tl);
+  if (kind === 'taxi') {
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.22, 0.4), new THREE.MeshBasicMaterial({ color: 0xffcc22 }));
+    sign.position.set(0, bodyY + bodyH / 2 + cabH + 0.12, 0); body.add(sign);
   }
-  let lightBar = null;
-  if (police) {
-    const bar = new THREE.Group();
-    const r = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.3), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
-    r.position.x = -0.35; bar.add(r);
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.3), new THREE.MeshBasicMaterial({ color: 0x2255ff }));
-    b.position.x = 0.35; bar.add(b);
-    bar.position.set(0, 1.55, 0.1); g.add(bar); lightBar = bar;
-    const star = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.05, 1.2), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-    star.position.y = 0.99; g.add(star);
+  if (kind === 'foodtruck') {
+    const awning = new THREE.Mesh(new THREE.BoxGeometry(wid + 0.5, 0.12, 2.2),
+      new THREE.MeshStandardMaterial({ color: 0xc0392b, side: THREE.DoubleSide }));
+    awning.position.set(0, 2.1, 0.4); awning.rotation.x = 0.18; body.add(awning);
+    const menu = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.8),
+      new THREE.MeshBasicMaterial({ map: signTexture(opts.menu || 'SATE 88', '#7a2e1d', '#ffe9b0') }));
+    menu.position.set(0, 1.5, wid / 2 + 0.03); menu.rotation.y = Math.PI / 2; body.add(menu);
   }
-  // Blob shadow: cheap grounding without a shadow map.
-  const shadow = new THREE.Mesh(
-    new THREE.CircleGeometry(kind === 'bus' ? 3.4 : 2.2, 12),
-    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 }),
-  );
-  shadow.rotation.x = -Math.PI / 2; shadow.scale.set(1, kind === 'bus' ? 2.6 : 1.9, 1); shadow.position.y = 0.03;
-  g.add(shadow);
-  return { group: g, wheels, steerWheels, body, lightBar, plate: plateText };
+  if (kind === 'bajaj') {
+    // blue three-wheeler: one front wheel, two rear, open cabin
+    const canopy = new THREE.Mesh(new THREE.BoxGeometry(wid, 0.18, len * 0.7),
+      new THREE.MeshStandardMaterial({ color: 0x2e86c1 }));
+    canopy.position.y = 1.85; body.add(canopy);
+  }
+  // headlights + taillights
+  const lightMat = new THREE.MeshBasicMaterial({ color: 0xfff2c0 });
+  const tailMat = new THREE.MeshBasicMaterial({ color: 0xcc2222 });
+  for (const sx of [-1, 1]) {
+    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.18, 0.06), lightMat);
+    hl.position.set(sx * (wid / 2 - 0.25), bodyY, len / 2 + 0.02); body.add(hl);
+    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.18, 0.06), tailMat);
+    tl.position.set(sx * (wid / 2 - 0.25), bodyY, -len / 2 - 0.02); body.add(tl);
+  }
+  // wheels: front pair steers, rear pair fixed. Bajaj gets one front wheel.
+  const wheelY = 0.36;
+  const wheelPos = kind === 'bajaj'
+    ? [[0, len / 2 - 0.5, true], [-wid / 2 + 0.2, -len / 2 + 0.5, false], [wid / 2 - 0.2, -len / 2 + 0.5, false]]
+    : [[-wid / 2 + 0.15, len / 2 - 0.7, true], [wid / 2 - 0.15, len / 2 - 0.7, true],
+       [-wid / 2 + 0.15, -len / 2 + 0.7, false], [wid / 2 - 0.15, -len / 2 + 0.7, false]];
+  for (const [wx, wz, steers] of wheelPos) {
+    const pivot = new THREE.Group();
+    pivot.position.set(wx, wheelY, wz);
+    const w = wheelMesh(kind === 'bajaj' ? 0.3 : 0.36);
+    pivot.add(w);
+    body.add(pivot);
+    if (steers) steerWheels.push(pivot);
+  }
+  const plate = opts.plate || makePlate(rng);
+  const plateM = plateMesh(plate, rng);
+  plateM.position.set(0, bodyY - 0.15, len / 2 + 0.05);
+  body.add(plateM);
+  const plateBack = plateMesh(plate, rng);
+  plateBack.position.set(0, bodyY - 0.15, -len / 2 - 0.05);
+  plateBack.rotation.y = Math.PI;
+  body.add(plateBack);
+  g.userData.plate = plate;
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+
+  const car = {
+    kind, mesh: g, body, steerWheels,
+    speed: 0, heading: opts.heading ?? 0, steerAngle: 0,
+    maxSpeed: kind === 'bus' ? 14 : kind === 'bajaj' ? 16 : kind === 'foodtruck' ? 13 : range(rng, 17, 24),
+    hp: 100, plate, owned: !!opts.owned, color,
+    road: null, roadCoord: 0, dir: 1, cruise: 0, honkCd: 0, bumpCd: 0,
+    length: len, width: wid,
+  };
+  g.rotation.y = car.heading;
+  return car;
 }
 
-export function createTraffic(scene, seed, count = 16) {
-  const rng = mulberry32(seed ^ 0x9e37);
-  const half = CITY.half;
-  const cars = [];
-  for (let i = 0; i < count; i++) {
-    // Jakarta traffic: mostly sedans, plus TransJakarta buses, angkot — and
-    // v4: yellow taxis (benchmark) in the mix; v4.1: blue bajaj (ref 2).
-    const roll = rng();
-    const kind = roll < 0.10 ? 'bajaj' : roll < 0.22 ? 'bus' : roll < 0.38 ? 'angkot' : roll < 0.53 ? 'taxi'
-      : pick(rng, ['sedan', 'sedan', 'sedan', 'pickup', 'van']);
-    const color = kind === 'bus' ? pick(rng, BUS_COLORS)
-      : kind === 'angkot' ? pick(rng, ANGKOT_COLORS)
-      : kind === 'taxi' ? 0xe8b93b
-      : kind === 'bajaj' ? 0x2e6fc2 : pick(rng, CAR_COLORS);
-    const { group, steerWheels, body } = buildCarMesh(color, kind);
-    const vertical = rng() < 0.5;
-    const lane = (rng() < 0.5 ? -1 : 1) * 3.2;
-    const road = -half + Math.floor(rand(rng, 0, CITY.blocks + 1)) * (CITY.block + CITY.road);
-    const along = rand(rng, -half, half);
-    const maxSpeed = kind === 'bus' ? rand(rng, 7, 10) : kind === 'angkot' ? rand(rng, 8, 12)
-      : kind === 'bajaj' ? rand(rng, 8, 12)
-      : kind === 'taxi' ? rand(rng, 10, 15) : rand(rng, 9, 14);
-    const car = {
-      mesh: group, kind, speed: rand(rng, 6, 11), maxSpeed, steerWheels, body,
-      heading: vertical ? (lane > 0 ? 0 : Math.PI) : (lane > 0 ? Math.PI / 2 : -Math.PI / 2),
-      vertical, lane, road, along, driver: true, stolen: false, hp: 100,
-      name: kind === 'bus' ? 'TransJakarta' : kind === 'angkot' ? 'Angkot'
-        : kind === 'bajaj' ? 'Bajaj' : kind === 'taxi' ? 'Taksi' : pick(rng, CAR_NAMES),
-    };
-    car.mesh.position.set(vertical ? road + 7 + lane : along, 0, vertical ? along : road + 7 + lane);
+// The starter sedan Mara owns: orange, parked by the bengkel.
+export function createStarterCar(rng) {
+  const car = buildCar('sedan', 0xd86a2a, rng, { owned: true, plate: 'B 1001 JKT', heading: Math.PI / 2 });
+  car.mesh.position.set(-141, 0, -128);
+  car.maxSpeed = 30;
+  car.road = null;
+  return car;
+}
+
+// 29 traffic cars in all (starter included): buses, sedans, angkot, vans,
+// taxis, a pickup, a food truck and five blue bajaj.
+export function spawnTraffic(scene, rng) {
+  const traffic = [];
+  const roads = [-312, -234, -156, -78, 78, 156, 234, 312];
+  const specs = [];
+  for (let i = 0; i < 5; i++) specs.push(['bus', pick(rng, [0xc0392b, 0xd35400])]);
+  for (let i = 0; i < 9; i++) specs.push(['sedan', pick(rng, [0x888888, 0x222222, 0xe8e8e8, 0x2e86c1, 0x27ae60, 0xc0392b, 0x8e44ad])]);
+  for (let i = 0; i < 2; i++) specs.push(['angkot', pick(rng, [0x1faa8a, 0x27ae60, 0xf1c40f])]);
+  for (let i = 0; i < 2; i++) specs.push(['van', pick(rng, [0xdddddd, 0x5a6a7a])]);
+  for (let i = 0; i < 3; i++) specs.push(['taxi', 0xf1c40f]);
+  specs.push(['pickup', 0x7a4a2a]);
+  specs.push(['foodtruck', 0xe8e4d8]);
+  for (let i = 0; i < 5; i++) specs.push(['bajaj', 0x2e86c1]);
+  const starter = createStarterCar(rng);
+  scene.add(starter.mesh);
+  traffic.push(starter);
+  for (const [kind, color] of specs) {
+    const car = buildCar(kind, color, rng, { route: pick(rng, ['TRANSJAKARTA', 'KOTA', 'BLOK M', 'CILANDAK']), menu: pick(rng, ['SATE 88', 'BAKSO 88', 'NASI GORENG']) });
+    const horizontal = rng() < 0.5;
+    const roadCoord = pick(rng, roads);
+    const along = range(rng, -320, 320);
+    car.road = horizontal ? 'z' : 'x';
+    car.roadCoord = roadCoord;
+    car.dir = rng() < 0.5 ? 1 : -1;
+    car.cruise = range(rng, 0.55, 0.95);
+    if (horizontal) {
+      car.mesh.position.set(along, 0, roadCoord + (car.dir > 0 ? 3.5 : -3.5));
+      car.heading = car.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+    } else {
+      car.mesh.position.set(roadCoord + (car.dir > 0 ? 3.5 : -3.5), 0, along);
+      car.heading = car.dir > 0 ? 0 : Math.PI;
+    }
     car.mesh.rotation.y = car.heading;
-    scene.add(group);
-    cars.push(car);
+    car.speed = car.maxSpeed * car.cruise * 0.7;
+    scene.add(car.mesh);
+    traffic.push(car);
   }
-  // v4 (benchmark): two food trucks cruising the Sudirman avenue slowly.
-  for (const [along, lane] of [[-80, 3.2], [60, -3.2]]) {
-    const { group } = buildCarMesh(pick(rng, [0x3aa655, 0xc23b2e]), 'foodtruck');
-    const car = {
-      mesh: group, kind: 'foodtruck', speed: 6, maxSpeed: 7,
-      heading: lane > 0 ? Math.PI / 2 : -Math.PI / 2,
-      vertical: false, lane, road: 39, along, driver: true, stolen: false, hp: 100,
-      name: 'Food Truck',
-    };
-    car.mesh.position.set(along, 0, 46 + lane);
-    car.mesh.rotation.y = car.heading;
-    scene.add(group);
-    cars.push(car);
-  }
-  return cars;
+  return traffic;
 }
 
-/** One traffic step: follow the lane, turn at intersections, avoid the car ahead. */
-export function updateTraffic(cars, playerPos, dt) {
-  const half = CITY.half;
-  const step = CITY.block + CITY.road;
-  for (const car of cars) {
-    if (!car.maxSpeed) continue; // parked / owned cars stay put
-    // Slow for the player / a car ahead on the same lane.
-    let target = car.maxSpeed;
-    for (const other of cars) {
-      if (other === car) continue;
-      if (Math.abs(other.road - car.road) > 2 || other.vertical !== car.vertical) continue;
-      const ahead = car.vertical
-        ? (car.heading === 0 ? other.along - car.along : car.along - other.along)
-        : (car.heading === Math.PI / 2 ? other.along - car.along : car.along - other.along);
-      if (ahead > 0 && ahead < 14) target = Math.min(target, 2.5);
+// Traffic cruise: follow the road line, wrap at the city edge, slow for the
+// car ahead, lean gently into the (rare) turn at the wrap.
+export function updateTraffic(traffic, dt, now, onHonk) {
+  for (const car of traffic) {
+    if (!car.road || !car.maxSpeed) continue; // parked / special cars sit still
+    const target = car.maxSpeed * car.cruise;
+    // slow for the car ahead on the same lane
+    let ahead = null, aheadD = 1e9;
+    for (const o of traffic) {
+      if (o === car || o.road !== car.road || o.roadCoord !== car.roadCoord || o.dir !== car.dir) continue;
+      const d = car.road === 'z' ? (o.mesh.position.x - car.mesh.position.x) * car.dir : (o.mesh.position.z - car.mesh.position.z) * car.dir;
+      if (d > 0 && d < aheadD) { aheadD = d; ahead = o; }
     }
-    if (playerPos) {
-      const d = dist2D(car.mesh.position.x, car.mesh.position.z, playerPos.x, playerPos.z);
-      if (d < 12) target = Math.min(target, 4);
+    let want = target;
+    if (ahead && aheadD < 14) want = Math.min(want, ahead.speed * 0.9);
+    if (ahead && aheadD < 7) {
+      want = 0;
+      car.honkCd -= dt;
+      if (car.honkCd <= 0) { car.honkCd = 4 + Math.random() * 3; if (onHonk) onHonk(car); }
     }
-    car.speed = lerp(car.speed, target, clamp(dt * 1.5, 0, 1));
-    const dir = (car.heading === 0 || car.heading === Math.PI / 2) ? 1 : -1;
-    car.along += car.speed * dt * dir;
-    // Turn at a random intersection instead of leaving town.
-    const stepPos = ((car.along + half) % step + step) % step;
-    const atJunction = stepPos < 1.5 || stepPos > step - 1.5;
-    if ((car.along > half - 8 || car.along < -half + 8) || (atJunction && Math.random() < dt * 0.35)) {
-      const oldX = car.vertical ? car.road + 7 + car.lane : car.along;
-      const oldZ = car.vertical ? car.along : car.road + 7 + car.lane;
-      car.vertical = !car.vertical;
-      car.road = clamp(nearestRoadCoord(car.vertical ? oldZ : oldX), -half, half);
-      car.along = car.vertical ? oldZ : oldX;
-      car.lane = (Math.random() < 0.5 ? -1 : 1) * 3.2;
-      car.heading = car.vertical ? (car.lane > 0 ? 0 : Math.PI) : (car.lane > 0 ? Math.PI / 2 : -Math.PI / 2);
+    car.speed = damp(car.speed, want, 1.2, dt);
+    const step = car.speed * car.dir * dt;
+    if (car.road === 'z') {
+      car.mesh.position.x += step;
+      if (car.mesh.position.x > 340) car.mesh.position.x = -340;
+      if (car.mesh.position.x < -340) car.mesh.position.x = 340;
+    } else {
+      car.mesh.position.z += step;
+      if (car.mesh.position.z > 340) car.mesh.position.z = -340;
+      if (car.mesh.position.z < -340) car.mesh.position.z = 340;
     }
-    if (car.along > half) car.along = -half + 10;
-    if (car.along < -half) car.along = half - 10;
-    // v4: lanes sit on the road centre (road + 7), not the strip edge —
-    // the old +lane from the edge put half the traffic on the sidewalk.
-    car.mesh.position.set(car.vertical ? car.road + 7 + car.lane : car.along, 0, car.vertical ? car.along : car.road + 7 + car.lane);
-    // v4.1: traffic leans into its turns — the body roll follows the
-    // heading change, so a bus or bajaj visibly banks at intersections.
-    // (Outward lean, like the player car's roll in driveCar.)
-    const turnRate = angleDiff(car.heading, car.mesh.rotation.y);
-    car.mesh.rotation.y = angleLerp(car.mesh.rotation.y, car.heading, clamp(dt * 4, 0, 1));
-    car.mesh.rotation.z = lerp(car.mesh.rotation.z, clamp(-turnRate * 0.35, -0.06, 0.06), clamp(dt * 4, 0, 1));
+    // gentle body roll with speed changes, wheels straight ahead
+    car.body.rotation.z = damp(car.body.rotation.z, clamp(-(car.speed - target) * 0.004, -0.03, 0.03), 4, dt);
+    car.body.position.y = Math.sin(now * 2 + car.mesh.position.x * 0.05) * 0.015;
   }
 }
 
-/** Arcade driving for the player's car. Returns speed in m/s.
- *  v4: SOLID buildings — the car moves axis by axis and stops at walls
- *  instead of passing through them. A hard hit bounces the car back a
- *  little, costs a few HP, and sets car.bump (main.js turns it into a
- *  thud, a camera shake and sparks). Traffic never needs this: it follows
- *  the road grid by construction, so it cannot enter a block. */
-export function driveCar(car, input, dt, colliders) {
-  const accel = input.forward ? 16 : input.back ? -10 : 0;
-  const top = input.back ? -12 : 34;
-  car.speed = clamp(car.speed + accel * dt, -12, top);
-  if (!input.forward && !input.back) car.speed = lerp(car.speed, 0, clamp(dt * 1.2, 0, 1));
-  if (input.handbrake) car.speed = lerp(car.speed, 0, clamp(dt * 5, 0, 1));
-  const steer = (input.left ? 1 : 0) - (input.right ? 1 : 0);
-  const dir = car.speed >= 0 ? 1 : -1;
-  // Wet Jakarta roads after the rain: a little less grip off the asphalt.
-  const grip = isOnRoad(car.mesh.position.x, car.mesh.position.z) ? 1 : 0.45;
-  car.heading += steer * clamp(Math.abs(car.speed) / 12, 0, 1) * 1.9 * dir * grip * dt;
-  const nx = car.mesh.position.x + Math.sin(car.heading) * car.speed * dt;
-  const nz = car.mesh.position.z + Math.cos(car.heading) * car.speed * dt;
-  // Soft city bounds + river block.
-  const half = CITY.half;
-  let px = clamp(nx, -half - 20, half + 60);
-  let pz = clamp(nz, -half - 20, half + 20);
-  if (px > half + 6 && Math.abs(pz) > 14) {
-    // Kali Ciliwung: only the bridge (z near 0) crosses.
-    px = half + 6;
-    car.speed *= 0.4;
-  }
-  if (colliders) {
-    // Axis-separated so the car slides along a wall; a blocked axis stops
-    // the car dead instead of letting it sink into the building.
-    const R = 1.7; // car footprint radius vs building boxes
-    let hit = false;
-    if (!circleHitsColliders(px, car.mesh.position.z, R, colliders)) {
-      car.mesh.position.x = px;
-    } else hit = true;
-    if (!circleHitsColliders(car.mesh.position.x, pz, R, colliders)) {
-      car.mesh.position.z = pz;
-    } else hit = true;
-    if (hit) {
-      const impact = Math.abs(car.speed);
-      car.bumpCd = Math.max(0, (car.bumpCd ?? 0) - dt);
-      if (impact > 4 && car.bumpCd <= 0) {
-        car.bump = true; car.bumpCd = 0.5;
-        car.hp = Math.max(0, (car.hp ?? 100) - Math.min(12, Math.round(impact * 0.5)));
-        car.speed = -car.speed * 0.25; // bounce back off the wall
-      } else {
-        car.speed = 0;
-      }
-      // A spawn inside a wall (or a shove) gets pushed back out.
-      resolveCircleOut(car.mesh.position, R, colliders);
-    }
-  } else {
-    car.mesh.position.x = px;
-    car.mesh.position.z = pz;
-  }
+// Arcade driving for the player's car. `input` is {up, down, left, right,
+// handbrake}. Returns {hit, impact} when a wall was met this step.
+export function driveCar(car, input, dt, colliders, now) {
+  const prevSpeed = car.speed;
+  const accel = input.up ? 15 : 0;
+  const brake = input.down ? 18 : 0;
+  if (input.up) car.speed = Math.min(car.speed + accel * dt, car.maxSpeed);
+  else if (input.down) car.speed = Math.max(car.speed - brake * dt, -8);
+  else car.speed = damp(car.speed, 0, input.handbrake ? 4.5 : 0.7, dt);
+  if (input.handbrake) car.speed = damp(car.speed, 0, 3.2, dt);
+
+  const steerTarget = (input.left ? 1 : 0) - (input.right ? 1 : 0);
+  const steerAmount = steerTarget * clamp(Math.abs(car.speed) / 8, 0, 1) * (car.speed < 0 ? -1 : 1);
+  car.steerAngle = damp(car.steerAngle, steerAmount * 0.55, 8, dt);
+  car.heading += car.steerAngle * (car.speed / 7) * dt * 1.6;
   car.mesh.rotation.y = car.heading;
-  // v4.1: the front wheels yaw with the steering, and the body leans into
-  // the turn (roll) and dives when braking (pitch) — all lerped, so the car
-  // never snaps between poses.
-  const steerAngle = steer * 0.42 * clamp(Math.abs(car.speed) / 12, 0, 1);
-  car.steerAngle = lerp(car.steerAngle ?? 0, steerAngle, clamp(dt * 10, 0, 1));
-  if (car.steerWheels) for (const p of car.steerWheels) p.rotation.y = car.steerAngle;
-  const tilt = clamp(steer * car.speed * 0.004, -0.08, 0.08);
-  car.mesh.rotation.z = lerp(car.mesh.rotation.z, tilt, clamp(dt * 6, 0, 1));
-  // v4.1: nose dive — hard braking (or the handbrake) pitches the nose down.
-  const braking = input.handbrake && Math.abs(car.speed) > 2 ? 0.06 : 0;
-  car.mesh.rotation.x = lerp(car.mesh.rotation.x,
-    clamp(-accel * 0.004, -0.05, 0.05) + braking, clamp(dt * 6, 0, 1));
-  // v4.1: suspension — the whole car breathes over the road, more off the
-  // asphalt (bumpy kampung / sidewalk) than on it.
-  car.suspPhase = (car.suspPhase ?? 0) + dt * (4 + Math.abs(car.speed));
-  const offRoad = isOnRoad(car.mesh.position.x, car.mesh.position.z) ? 1 : 2.2;
-  car.mesh.position.y = 0.025 * Math.sin(car.suspPhase) * Math.min(1, Math.abs(car.speed) / 15) * offRoad
-    + 0.012 * Math.sin(car.suspPhase * 2.7) * offRoad;
-  return Math.abs(car.speed);
+  for (const w of car.steerWheels) w.rotation.y = car.steerAngle * 0.9;
+
+  const dx = Math.sin(car.heading) * car.speed * dt;
+  const dz = Math.cos(car.heading) * car.speed * dt;
+  const res = resolveCircleOut(car.mesh.position.x, car.mesh.position.z, 1.7, dx, dz, colliders);
+  let hit = null, impact = 0;
+  if (res.hit) {
+    impact = Math.abs(prevSpeed);
+    hit = res.hit;
+    car.speed = impact > 6 ? -prevSpeed * 0.12 : 0;
+    car.bumpCd -= dt;
+    if (impact > 4 && car.bumpCd <= 0) {
+      car.hp = Math.max(0, car.hp - Math.min(12, Math.round(impact * 0.6)));
+      car.bumpCd = 1.5;
+    }
+  }
+  car.mesh.position.x = res.x;
+  car.mesh.position.z = res.z;
+  // body roll outward on turns, nose dive on the handbrake, suspension bob
+  const rollTarget = clamp(-car.steerAngle * car.speed * 0.012, -0.06, 0.06);
+  car.body.rotation.z = damp(car.body.rotation.z, rollTarget, 6, dt);
+  const pitchTarget = input.handbrake ? 0.015 : 0;
+  car.body.rotation.x = damp(car.body.rotation.x, pitchTarget, 10, dt);
+  // mirror the pose onto the mesh itself so a reader of mesh.rotation
+  // (camera code, playtests) sees the same roll and pitch as the body
+  car.mesh.rotation.z = car.body.rotation.z;
+  car.mesh.rotation.x = car.body.rotation.x;
+  const offRoad = Math.abs(car.mesh.position.x) % 78 > 8 && Math.abs(car.mesh.position.z) % 78 > 8;
+  const bobAmp = offRoad ? 0.05 : 0.03;
+  // suspension bob rides on the mesh itself (so mesh.position.y varies),
+  // the body stays level with it
+  car.mesh.position.y = Math.sin(now * 9) * bobAmp * clamp(Math.abs(car.speed) / 10, 0.2, 1);
+  car.body.position.y = 0;
+  return { hit, impact };
 }

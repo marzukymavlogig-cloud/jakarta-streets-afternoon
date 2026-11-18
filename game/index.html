@@ -5,93 +5,69 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>JAKARTA — Streets of the Afternoon</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #10141c;
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a1410;
     font-family: 'Segoe UI', system-ui, sans-serif; color: #fff; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  .hidden { display: none !important; }
-  /* HUD */
   #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
-  #hud-top-right { position: absolute; top: 14px; right: 16px; text-align: right;
-    text-shadow: 0 2px 6px #000; }
-  #hud-cash { font-size: 30px; font-weight: 800; color: #7ddb6a; }
-  #hud-stars { font-size: 26px; letter-spacing: 4px; color: #ffd23b; }
-  #hud-stars.hot { color: #ff5340; animation: pulse 0.7s infinite alternate; }
-  @keyframes pulse { from { opacity: 1; } to { opacity: 0.45; } }
-  #hud-clock, #hud-weather, #hud-radio { font-size: 15px; font-weight: 600; opacity: 0.95; }
-  #hud-dj { font-size: 13px; font-weight: 500; font-style: italic; opacity: 0.85;
-    max-width: 320px; margin-top: 2px; }
+  #hud button { pointer-events: auto; cursor: pointer; }
+  #hud-top-left { position: absolute; top: 14px; left: 16px; }
+  #hud-cash { font-size: 30px; font-weight: 800; color: #7dff9a;
+    text-shadow: 0 2px 6px rgba(0,0,0,.8); }
+  #hud-stars { font-size: 26px; letter-spacing: 4px; color: #ffd700;
+    text-shadow: 0 2px 6px rgba(0,0,0,.8); }
+  #hud-objective { margin-top: 8px; max-width: 420px; font-size: 15px; font-weight: 600;
+    background: rgba(0,0,0,.55); padding: 7px 10px; border-radius: 6px; border-left: 4px solid #ffd700; }
+  #hud-mission-bar { margin-top: 6px; width: 300px; height: 16px; background: rgba(0,0,0,.6);
+    border-radius: 8px; overflow: hidden; position: relative; }
+  #hud-mission-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ffaa22, #ffd700); }
+  #hud-mission-pct { position: absolute; right: 6px; top: 0; font-size: 12px; line-height: 16px; font-weight: 700; }
+  #hud-timer { margin-top: 4px; font-size: 14px; font-weight: 700; color: #ffd700; text-shadow: 0 1px 4px #000; }
+  #hud-top-right { position: absolute; top: 14px; right: 16px; text-align: right; }
+  #hud-minimap { border-radius: 50%; border: 3px solid rgba(255,255,255,.7);
+    box-shadow: 0 2px 10px rgba(0,0,0,.6); background: rgba(20,26,34,.85); }
+  #hud-health-wrap { margin-top: 6px; width: 180px; height: 14px; background: rgba(0,0,0,.6);
+    border-radius: 7px; overflow: hidden; position: relative; margin-left: auto; }
+  #hud-health-fill { height: 100%; width: 100%; background: #37c978; }
+  #hud-health-text { position: absolute; right: 6px; top: 0; font-size: 11px; line-height: 14px; font-weight: 700; }
   #hud-bottom-left { position: absolute; left: 16px; bottom: 16px; }
-  #hud-bottom-left #health-bar { margin-top: 8px; width: 168px; }
-  #subtitle { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%);
-    max-width: 640px; text-align: center; font-size: 17px; font-weight: 600;
-    background: rgba(0,0,0,0.55); padding: 8px 16px; border-radius: 6px;
-    text-shadow: 0 1px 4px #000; opacity: 0; transition: opacity 0.3s; }
-  #subtitle.show { opacity: 1; }
-  /* v4.1 (ref 2): dialogue portrait — a round initial badge for the speaker. */
-  #subtitle-face { display: inline-block; width: 34px; height: 34px; line-height: 34px;
-    border-radius: 50%; background: #d84a4a; color: #fff; font-size: 19px; font-weight: 900;
-    text-align: center; margin-right: 10px; vertical-align: middle; border: 2px solid #fff; }
-  #subtitle-name { color: #ffd23b; font-weight: 800; margin-right: 8px; }
-  #minimap { width: 168px; height: 168px; border: 3px solid rgba(255,255,255,0.65);
-    border-radius: 50%; background: #10141c; box-shadow: 0 4px 18px rgba(0,0,0,0.6); }
-  #hud-bottom-right { position: absolute; right: 16px; bottom: 16px; text-align: right;
-    text-shadow: 0 2px 6px #000; }
-  #hud-speed { font-size: 46px; font-weight: 800; }
-  #hud-weapon { font-size: 17px; font-weight: 800; color: #ffd23b; margin-top: 2px; }
-  /* v4.1 (ref 2): weapon slots — 1 PISTOL · 2 SMG · 3 SHOTGUN · 4 SENAPAN,
-     dim until owned, gold when active. */
-  #hud-slots { margin-top: 4px; font-size: 12px; font-weight: 800; letter-spacing: 1px; }
-  #hud-slots .slot { display: inline-block; padding: 3px 7px; margin-left: 5px;
-    background: rgba(0,0,0,0.5); color: #8a8f98; border: 1px solid #555; border-radius: 4px; }
-  #hud-slots .slot.owned { color: #e8e4da; border-color: #999; }
-  #hud-slots .slot.active { color: #1a1206; background: #ffd23b; border-color: #ffd23b; }
-  #health-bar { width: 200px; height: 12px; background: rgba(0,0,0,0.55);
-    border: 1px solid #fff; border-radius: 6px; margin-top: 4px; }
-  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #37c978, #8be36a);
-    border-radius: 6px; }
-  #hud-objective { position: absolute; top: 14px; left: 16px; max-width: 430px;
-    font-size: 17px; font-weight: 700; text-shadow: 0 2px 6px #000;
-    background: rgba(0,0,0,0.45); padding: 8px 12px; border-left: 5px solid #ffc93b; border-radius: 4px; }
-  /* v4.1 (ref 2): mission progress bar under the objective, like the
-     "MELARIKAN DIRI (68%)" panel — fills as the job's steps complete. */
-  #hud-mission-bar { display: none; position: relative; height: 10px; margin-top: 7px;
-    background: rgba(0,0,0,0.6); border-radius: 5px; overflow: hidden; }
-  #hud-mission-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ffd23b, #ff9a2e);
-    border-radius: 5px; transition: width 0.3s; }
-  #hud-mission-pct { position: absolute; right: 6px; top: -1px; font-size: 10px; font-weight: 800;
-    color: #fff; text-shadow: 0 1px 3px #000; }
-  #hud-timer { font-size: 22px; font-weight: 800; color: #ffc93b; margin-top: 4px; }
-  #hud-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
-    font-size: 13px; opacity: 0.85; text-shadow: 0 1px 4px #000; white-space: nowrap; }
-  #toast { position: absolute; top: 22%; left: 50%; transform: translateX(-50%) scale(0.9);
-    text-align: center; opacity: 0; transition: opacity 0.25s, transform 0.25s; }
-  #toast.show { opacity: 1; transform: translateX(-50%) scale(1); }
-  #toast-title { font-size: 44px; font-weight: 900; letter-spacing: 3px; color: #ffc93b;
-    text-shadow: 0 3px 0 #7a2d12, 0 6px 18px #000; }
-  #toast-text { font-size: 18px; font-weight: 600; text-shadow: 0 2px 6px #000; }
-  /* Screens */
-  .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; text-align: center;
-    background: linear-gradient(180deg, rgba(16,20,28,0.25) 0%, rgba(16,20,28,0.78) 78%); }
-  .screen h1 { font-size: 74px; margin: 0; letter-spacing: 6px; font-weight: 900;
-    background: linear-gradient(180deg, #ffe9a8, #ff7a2e); -webkit-background-clip: text;
-    background-clip: text; color: transparent; text-shadow: 0 6px 30px rgba(0,0,0,0.4); }
-  .screen h2 { font-size: 22px; letter-spacing: 8px; font-weight: 700; color: #ffd23b; margin: 6px 0 18px; }
-  .screen p { max-width: 620px; font-size: 17px; line-height: 1.55; color: #f2ede2; margin: 6px 0; }
-  .screen .controls { font-size: 14px; color: #cfd6de; background: rgba(0,0,0,0.45);
-    padding: 10px 18px; border-radius: 8px; margin-top: 14px; line-height: 1.7; }
-  .btn { pointer-events: auto; cursor: pointer; font-size: 19px; font-weight: 800; letter-spacing: 1px;
-    color: #1a1206; background: linear-gradient(180deg, #ffd23b, #ff9a2e); border: none;
-    padding: 13px 34px; margin: 6px; border-radius: 10px; box-shadow: 0 4px 0 #a34d00, 0 8px 22px rgba(0,0,0,0.5); }
-  .btn:hover { filter: brightness(1.08); }
-  .btn:disabled { filter: grayscale(0.8); opacity: 0.55; cursor: default; }
-  .btn.ghost { background: rgba(255,255,255,0.16); color: #fff; box-shadow: none; border: 2px solid #fff; }
-  #shop-list { margin-top: 12px; }
-  .shop-row { display: flex; gap: 14px; align-items: center; justify-content: center;
-    font-size: 18px; background: rgba(0,0,0,0.5); padding: 10px 18px; border-radius: 8px; margin: 6px 0; }
-  .swatch { width: 26px; height: 26px; border-radius: 5px; border: 2px solid #fff; display: inline-block; }
-  .shop-row button { cursor: pointer; font-weight: 800; padding: 6px 16px; border-radius: 6px; border: none;
-    background: #ffd23b; }
+  #hud-radio { font-size: 15px; font-weight: 700; color: #ffe9b0; text-shadow: 0 1px 4px #000; }
+  #hud-dj { font-size: 13px; font-style: italic; color: #ddd; text-shadow: 0 1px 4px #000; max-width: 420px; }
+  #hud-weapon { margin-top: 6px; font-size: 18px; font-weight: 800; color: #fff; text-shadow: 0 1px 4px #000; }
+  #hud-slots { margin-top: 4px; display: flex; gap: 6px; }
+  #hud-slots .slot { font-size: 12px; font-weight: 700; padding: 4px 8px; border-radius: 4px;
+    background: rgba(0,0,0,.55); color: #777; border: 1px solid #555; }
+  #hud-slots .slot.owned { color: #ddd; border-color: #999; }
+  #hud-slots .slot.active { color: #111; background: #ffd700; border-color: #ffd700; }
+  #hud-bottom-right { position: absolute; right: 16px; bottom: 16px; text-align: right; }
+  #hud-speed { font-size: 40px; font-weight: 800; line-height: 1; text-shadow: 0 2px 8px rgba(0,0,0,.9); }
+  #hud-speed-unit { font-size: 12px; color: #ddd; }
+  #hud-clock { font-size: 20px; font-weight: 700; text-shadow: 0 1px 4px #000; }
+  #hud-weather { font-size: 14px; text-shadow: 0 1px 4px #000; }
+  #hud-dialogue { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%);
+    display: flex; gap: 10px; align-items: center; max-width: 640px;
+    background: rgba(0,0,0,.72); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,215,0,.5); }
+  #hud-portrait { width: 44px; height: 44px; border-radius: 50%; background: #ffd700; color: #111;
+    font-size: 24px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: none; }
+  #hud-dialogue-speaker { font-size: 12px; font-weight: 800; color: #ffd700; letter-spacing: 1px; }
+  #hud-dialogue-text { font-size: 16px; }
+  #hud-toasts { position: absolute; left: 50%; top: 90px; transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .toast { background: rgba(0,0,0,.75); padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; }
+  .toast.good { border: 1px solid #37c978; color: #a9f5c6; }
+  .toast.warn { border: 1px solid #ff4444; color: #ffb3b3; }
+  #hud-hint { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%);
+    font-size: 11px; color: rgba(255,255,255,.65); text-shadow: 0 1px 3px #000; white-space: nowrap; }
+  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; background: rgba(10,8,6,.55); pointer-events: auto; text-align: center; padding: 20px; }
+  .screen h1 { font-size: 64px; margin: 0; letter-spacing: 6px; color: #ffd700;
+    text-shadow: 0 4px 24px rgba(255,150,40,.6); }
+  .screen h2 { font-size: 22px; margin: 4px 0 18px; font-weight: 400; letter-spacing: 3px; color: #ffe9b0; }
+  .screen p { max-width: 560px; font-size: 16px; line-height: 1.5; }
+  .screen .controls { font-size: 13px; color: #ccc; }
+  .screen .fine { margin-top: 22px; font-size: 12px; color: #999; }
+  .screen button { margin: 6px; padding: 12px 28px; font-size: 17px; font-weight: 800;
+    background: #ffd700; color: #111; border: none; border-radius: 8px; }
+  .screen button:hover { background: #ffe066; }
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>
 <script type="importmap">
@@ -99,81 +75,8 @@
 </script>
 </head>
 <body>
-<canvas id="game" aria-label="JAKARTA: an open-world crime game in golden-hour Jakarta, Indonesia"></canvas>
-
-<div id="hud" class="hidden">
-  <div id="hud-objective"><span id="hud-objective-text">Tekan M untuk mulai job cerita berikutnya.</span>
-    <div id="hud-mission-bar"><div id="hud-mission-fill"></div><span id="hud-mission-pct"></span></div>
-  </div>
-  <div id="hud-top-right">
-    <div id="hud-cash">Rp250.000</div>
-    <div id="hud-stars">☆☆☆☆☆</div>
-    <div id="hud-clock">16:30</div>
-    <div id="hud-weather">☀ Cerah</div>
-    <div id="hud-radio">♪ Kota FM 98</div>
-    <div id="hud-dj"></div>
-  </div>
-  <div id="hud-bottom-left">
-    <canvas id="minimap" width="168" height="168"></canvas>
-    <div id="health-bar"><div id="health-fill"></div></div>
-    <div>HEALTH <span id="hud-health">100</span></div>
-  </div>
-  <div id="hud-bottom-right">
-    <div id="hud-speed">0 km/h</div>
-    <div id="hud-weapon">TANGAN KOSONG · 1–4 ganti senjata</div>
-    <div id="hud-slots"></div>
-    <div id="hud-timer"></div>
-  </div>
-  <div id="subtitle"><span id="subtitle-face">M</span><span id="subtitle-name"></span><span id="subtitle-text"></span></div>
-  <div id="hud-hint">WASD jalan / nyetir &nbsp;·&nbsp; E naik mobil &nbsp;·&nbsp; F pukul / tembak &nbsp;·&nbsp; 1–4 senjata &nbsp;·&nbsp; R isi ulang &nbsp;·&nbsp; M job &nbsp;·&nbsp; T radio &nbsp;·&nbsp; Spasi rem &nbsp;·&nbsp; Esc jeda</div>
-  <div id="toast"><div id="toast-title"></div><div id="toast-text"></div></div>
-</div>
-
-<div id="screen-title" class="screen">
-  <h1>JAKARTA</h1>
-  <h2>STREETS OF THE AFTERNOON</h2>
-  <p>Mara pulang ke Jakarta untuk menyelamatkan bengkel kakaknya — dan menemukan
-  kota yang hanya menghormati orang yang berani mengambil. Lewati Sudirman,
-  hindari polisi, dan selesaikan lima job di bawah matahari sore, dari Monas
-  sampai Ancol.</p>
-  <p>Game open-world orisinal: nyetir dan bajak mobil, gig taksi dan antar paket,
-  sistem buronan dengan kejar-kejaran polisi dan helikopter, siklus sore hari
-  dengan hujan dan kabut, tiga stasiun radio Indonesia, dealer mobil, dan
-  save yang menjaga ceritamu.</p>
-  <div>
-    <button class="btn" id="btn-new">NEW GAME</button>
-    <button class="btn" id="btn-continue" disabled>CONTINUE</button>
-    <button class="btn ghost" id="btn-freeroam">FREE ROAM</button>
-  </div>
-  <div class="controls">WASD jalan / nyetir &nbsp;·&nbsp; E naik atau bajak mobil &nbsp;·&nbsp; F pukul / tembak &nbsp;·&nbsp; 1–4 ganti senjata &nbsp;·&nbsp; R isi ulang<br>
-  M job cerita berikutnya &nbsp;·&nbsp; T radio &nbsp;·&nbsp; Spasi rem tangan &nbsp;·&nbsp; C kamera &nbsp;·&nbsp; drag mouse untuk melihat &nbsp;·&nbsp; Esc jeda &amp; simpan</div>
-</div>
-
-<div id="screen-pause" class="screen hidden">
-  <h1 style="font-size:52px">JEDA</h1>
-  <p>Jakarta tidak menunggu siapa pun — kecuali sekarang.</p>
-  <div>
-    <button class="btn" id="btn-resume">RESUME</button>
-    <button class="btn" id="btn-save">SAVE GAME</button>
-    <button class="btn ghost" id="btn-restart">RESTART STORY</button>
-  </div>
-  <div class="controls">Progress juga tersimpan otomatis setelah setiap job selesai.</div>
-</div>
-
-<div id="screen-dead" class="screen hidden">
-  <h1 id="dead-title" style="font-size:64px">TEWAS</h1>
-  <p id="dead-text">Mara tumbang. Bengkel masih menunggu.</p>
-  <div><button class="btn" id="btn-dead">KEMBALI KE BENGKEL</button></div>
-</div>
-
-<div id="screen-shop" class="screen hidden">
-  <h1 style="font-size:44px">MOBIL BEKAS MANGGA DUA</h1>
-  <p id="shop-cash">Uang kamu: Rp250.000</p>
-  <div id="shop-list"></div>
-  <p id="shop-msg"></p>
-  <div><button class="btn" id="btn-shop-close">SELESAI</button></div>
-</div>
-
+<canvas id="game" aria-label="JAKARTA Streets of the Afternoon: open-world crime game in Jakarta"></canvas>
+<div id="hud"></div>
 <p id="status" role="status" aria-live="polite"></p>
 <script type="module" src="./src/main.js"></script>
 </body>

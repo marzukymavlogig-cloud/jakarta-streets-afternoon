@@ -1,269 +1,160 @@
-// shots.js — staging for the four screenshots, all in the Jakarta
-// golden hour (16:30–17:30). Each shot is the real game running: the same
-// world, the same rules, steered by a small autopilot that drives toward
-// the mission marker and keeps off the sidewalks.
-// v4 adds staged shots for the new work: face (every character has one),
-// collision (a car stopped dead by the Monas base), busy (Sudirman at
-// rush hour) and weapons (Mara firing her rifle on the plaza).
-// v4.1 adds golden: street food at dusk — the smoking carts, the vendor
-// serving a buyer, the crowd on Lapangan Merdeka.
-// ?shot=start|play|chase|mission (with &seed=N) stages that scene,
-// paints it twice and sets window.__shotReady.
-import { dist2D, angleDiff } from './util.js';
-import { addWanted } from './police.js';
-import { startStoryMission } from './missions.js';
+// shots.js — staged screenshots. Each shot sets up a real gameplay state
+// (a fresh world, a real position, real traffic, real wanted level), plays
+// it forward in fixed 1/60 s steps with a simple autopilot, then freezes it
+// (police.frozen + G.shotDone) so the frame the screenshot grabs is the
+// frame the game actually reached. Same seed -> same frame.
+import { WEAPONS } from './player.js';
+import { addHeat, spawnCopForShot } from './police.js';
+import { startStory } from './missions.js';
 
-export const SHOT_NAMES = ['start', 'play', 'chase', 'mission', 'monas', 'vendors', 'kampung',
-  'face', 'collision', 'busy', 'weapons', 'golden'];
+const STEP = 1 / 60;
 
-/** Place the world for a shot: golden-hour time, weather, wanted level, story. */
-export function placeForShot(G, name) {
-  const p = G.player;
-  G.missions.gigCd = 999; // no random gig spawns during a staged shot
+function runSim(G, seconds, input) {
+  G.autoInput = input || null;
+  const n = Math.round(seconds / STEP);
+  for (let i = 0; i < n; i++) G.stepWorld(STEP);
+  G.autoInput = null;
+}
+
+function putPlayer(G, x, z, heading) {
+  const P = G.player;
+  P.pos.set(x, 0, z);
+  P.mesh.position.copy(P.pos);
+  P.heading = heading;
+  P.mesh.rotation.y = heading;
+  P.speed = 0;
+  G.camYaw = heading;
+}
+
+function putPlayerInCar(G, car, x, z, heading) {
+  car.mesh.position.set(x, 0, z);
+  car.heading = heading;
+  car.mesh.rotation.y = heading;
+  car.speed = 0;
+  G.player.inCar = car;
+  G.player.mesh.visible = false;
+  G.player.pos.set(x, 0, z);
+  G.camYaw = heading;
+}
+
+export function stageShot(name, G) {
+  const P = G.player;
+  G.hour = 17;
+  G.weather = 'clear';
+  G.shotDone = false;
+  G.police.frozen = false;
+  G.police.heat = 0; G.police.wanted = 0;
+  G.mode = 'play';
+  G.shotCam = null;
+
   if (name === 'start') {
-    G.hour = 16.6; G.weather = 'clear'; // golden hour over Monas
-    p.pos.set(60, 0, 120); p.heading = Math.PI * 0.75;
-    G.camMode = 'cinematic';
-    return { seconds: 0 };
-  }
-  if (name === 'mission') {
-    G.hour = 16.4; G.weather = 'clear';
-    // Mara walks up to the bengkel with the marker dead ahead.
-    p.pos.set(-138, 0, -196); p.heading = -0.26;
-    p.inCar = null; p.mesh.visible = true;
-    p.mesh.position.copy(p.pos);
-    startStoryMission(G, 0);
-    // Pull the marker to the bengkel forecourt so its beam reads over the roofs.
-    G.missions.marker.group.position.set(-150, 0, -181);
-    G.camMode = 'follow';
-    G.camYaw = -0.26;
-    return { seconds: 1.0 };
-  }
-  if (name === 'monas') {
-    // v3: Mara on foot on the plaza's south edge, Monas ahead, the crowd and
-    // the vendor ring all around her.
-    G.hour = 16.3; G.weather = 'clear';
-    p.pos.set(0, 0, 40); p.heading = Math.PI;
-    p.inCar = null; p.mesh.visible = true;
-    p.mesh.position.copy(p.pos);
-    G.missions.marker.group.visible = false;
-    G.camMode = 'follow';
-    G.camYaw = Math.PI;
-    G.camDist = 18; G.shotLookY = 12; G.shotCamH = 3; // crowd in frame, Monas shaft rising above
-    G.hud.setObjective('Monas — sore di Lapangan Merdeka, kaki lima di mana-mana');
-    return { seconds: 2.5 };
-  }
-  if (name === 'vendors') {
-    // v3: Mara on the Thamrin sidewalk among the gerobak and warung tenda,
-    // the halte and the avenue behind her.
-    G.hour = 16.4; G.weather = 'clear';
-    p.pos.set(18, 0, -60); p.heading = 2.16;
-    p.inCar = null; p.mesh.visible = true;
-    p.mesh.position.copy(p.pos);
-    G.missions.marker.group.visible = false;
-    G.camMode = 'follow';
-    G.camYaw = 2.16; G.camDist = 9;
-    G.hud.setObjective('Kaki lima Jl. Thamrin — bakso, sate, es teh');
-    return { seconds: 2.5 };
-  }
-  if (name === 'kampung') {
-    // v3: Mara inside the kampung — dense houses, corrugated roofs, laundry
-    // lines and tangled wires down a narrow alley.
-    G.hour = 16.5; G.weather = 'clear';
-    p.pos.set(241, 0, 150); p.heading = 0.7;
-    p.inCar = null; p.mesh.visible = true;
-    p.mesh.position.copy(p.pos);
-    G.missions.marker.group.visible = false;
-    G.camMode = 'follow';
-    G.camYaw = 0.7;
-    G.hud.setObjective('Kampung Melayu — gang sempit, jemuran, kabel semrawut');
-    return { seconds: 1.5 };
-  }
-  if (name === 'face') {
-    // v4: faces up close — Mara and two plaza peds facing the camera, so
-    // eyes, brows, nose and mouth read in the frame (front camera). Mara
-    // faces north toward Monas, camera north of her, so the background is
-    // the plaza and its crowd — not the monument's blank wall.
-    G.hour = 16.4; G.weather = 'clear';
-    p.pos.set(0, 0, 30); p.heading = Math.PI;
-    p.inCar = null; p.mesh.visible = true;
-    p.mesh.position.copy(p.pos);
-    G.missions.marker.group.visible = false;
-    G.camMode = 'follow';
-    G.shotFrontCam = true; G.camDist = 4.5;
-    for (const [i, dx] of [[0, -2.4], [1, 2.4]]) {
-      const ped = G.peds[36 + i]; // plaza crowd members, not roamers
-      if (!ped) continue;
-      ped.mesh.position.set(dx, 0, 30);
-      ped.targetX = dx; ped.targetZ = 30; ped.pause = 10;
-      ped.heading = Math.PI; ped.mesh.rotation.y = Math.PI;
+    G.mode = 'title';
+    G.hour = 17.1;
+    putPlayer(G, 0, 60, Math.PI);
+    G.shotCam = { pos: [95, 26, 165], look: [0, 42, 0] };
+    runSim(G, 2.5, null);
+  } else if (name === 'play') {
+    const car = G.traffic.find((c) => c.owned);
+    putPlayerInCar(G, car, -100, 42.8, Math.PI / 2);
+    G.shotCam = null; // chase camera follows the car
+    runSim(G, 6, { up: true });
+  } else if (name === 'chase') {
+    // down the Sudirman avenue, into a PD roadblock: the car drives east
+    // for 2 s, then three PD cars are framed ahead across the avenue with
+    // the helicopter overhead, and the frame freezes
+    const car = G.traffic.find((c) => c.owned);
+    putPlayerInCar(G, car, -60, 42.8, Math.PI / 2);
+    addHeat(G.police, 95);
+    G.police.spawnCd = 99; // no extra auto-spawned cops during the short sim
+    runSim(G, 2, { up: true });
+    const cx = car.mesh.position.x;
+    for (const [x, z] of [[cx + 22, 42.8], [cx + 30, 38], [cx + 30, 47.5]]) {
+      const cop = spawnCopForShot(G.police, x, z);
+      cop.heading = -Math.PI / 2; cop.mesh.rotation.y = cop.heading;
+      G.police.cops.push(cop);
     }
-    G.hud.setObjective('Wajah-wajah Jakarta — Mara dan warga Monas');
-    return { seconds: 1.5 };
-  }
-  if (name === 'collision') {
-    // v4: a sedan drives straight at the Monas base — the v4 wall stops it
-    // dead (bump, shake, sparks) instead of letting it pass through.
-    G.hour = 16.4; G.weather = 'clear';
-    const car = G.traffic.find((c) => c.kind === 'sedan') || G.traffic[0];
-    enterCar(G, car);
-    car.mesh.position.set(0, 0, 42); car.heading = Math.PI; car.speed = 22;
-    car.mesh.rotation.y = car.heading;
-    G.missions.marker.group.visible = false;
-    G.hud.setObjective('TABRAKAN — tembok Monas tidak tembus!');
-    G.camMode = 'chase';
-    G.camDist = 10; // closer chase cam: the stopped car fills the frame
-    G.shotDriveStraight = true;
-    return { seconds: 1.25 }; // freeze just after the first impact, at the steps
-  }
-  if (name === 'busy') {
-    // v4: rush hour on Jl. Sudirman — taxis, a bus, a food truck and a jam
-    // of sedans on the avenue, peds on the sidewalks, neon coming on.
-    G.hour = 16.5; G.weather = 'clear';
-    const car = G.traffic.find((c) => c.kind === 'sedan') || G.traffic[0];
-    enterCar(G, car);
-    car.mesh.position.set(-100, 0, 42.8); car.heading = Math.PI / 2; car.speed = 12;
-    car.mesh.rotation.y = car.heading;
-    // Pack the avenue ahead with a real jam: sedans, a bus and a taxi.
-    const jam = G.traffic.filter((c) => c !== car && c.maxSpeed).slice(0, 7);
-    jam.forEach((c, i) => {
-      c.vertical = false; c.road = 39; c.lane = i % 2 === 0 ? 3.2 : -3.2;
-      c.along = -80 + Math.floor(i / 2) * 26;
-      c.heading = Math.PI / 2; c.speed = 7;
-      c.mesh.position.set(c.along, 0, 46 + c.lane);
-      c.mesh.rotation.y = c.heading;
-    });
-    G.missions.marker.group.visible = false;
-    G.hud.setObjective('Macet sore di Jl. Sudirman');
-    G.camMode = 'chase';
-    G.shotTopSpeed = 8; // crawl in the jam — 29 km/h, not 122
-    return { seconds: 1.5 }; // short: the car stays inside the jam, not past it
-  }
-  if (name === 'weapons') {
-    // v4: Mara on the plaza with her rifle — muzzle flash held for the
-    // frame, peds scattering ahead of her.
-    G.hour = 16.4; G.weather = 'clear';
-    p.pos.set(0, 0, 28); p.heading = Math.PI;
-    p.inCar = null; p.mesh.visible = true;
-    p.mesh.position.copy(p.pos);
-    p.arsenal.rifle = { mag: 30, reserve: 60 };
-    p.weapon = 'rifle';
-    G.missions.marker.group.visible = false;
-    G.camMode = 'follow';
-    G.camYaw = Math.PI; G.camDist = 9;
-    G.shotFlash = true; // hold the muzzle flash for the frozen frame
-    for (const [i, dx] of [[0, -3], [1, 0], [2, 3]]) {
-      const ped = G.peds[26 + i];
-      if (!ped) continue;
-      ped.mesh.position.set(dx, 0, 10 + i * 2);
-      ped.fleeing = 5; ped.targetX = dx; ped.targetZ = -20;
-    }
-    G.hud.setObjective('SENAPAN — Mara menembak di Lapangan Merdeka');
-    return { seconds: 1.5 };
-  }
-  if (name === 'golden') {
-    // v4.1 (ref 2): street food at dusk — Mara walks toward the BAKSO
-    // MALANG cart, its smoke rising; a buyer browses the cart so the vendor
-    // is caught mid-serve; the crowd drifts behind her.
-    G.hour = 17.0; G.weather = 'clear';
-    p.pos.set(30, 0, 20); p.heading = Math.atan2(56 - 30, 0 - 20);
-    p.inCar = null; p.mesh.visible = true;
-    p.mesh.position.copy(p.pos);
-    G.missions.marker.group.visible = false;
-    G.camMode = 'follow';
-    G.camYaw = p.heading; G.camDist = 7;
-    const buyer = G.peds[36];
-    if (buyer) {
-      buyer.mesh.position.set(52, 0, 3);
-      buyer.targetX = 52; buyer.targetZ = 3; buyer.pause = 6; // browsing the bakso cart
-    }
-    G.hud.setObjective('Sore di Lapangan Merdeka — sate & bakso');
-    return { seconds: 1.2 };
-  }
-  if (name === 'chase') {
-    G.hour = 16.5; G.weather = 'clear';
-    // Mara in a fast sedan on the central boulevard (road z = 46), cops on her.
-    const car = G.traffic.find((c) => c.kind === 'sedan') || G.traffic[0];
-    enterCar(G, car);
-    car.mesh.position.set(-60, 0, 42.8); car.heading = Math.PI / 2; car.speed = 24;
-    car.mesh.rotation.y = car.heading;
-    addWanted(G.police, 65, 0);
     G.police.spawnCd = 0;
-    G.missions.marker.group.visible = false;
-    G.hud.setObjective('DICARI ★★★★ — kabur dari polisi Jakarta!');
-    G.camMode = 'chase';
-    return { seconds: 7 };
+  } else if (name === 'mission') {
+    startStory(G);
+    putPlayer(G, -130, -130, Math.PI * 0.75);
+    G.shotCam = { pos: [-118, 4.5, -112], look: [-142, 1.5, -148] };
+    runSim(G, 1.5, null);
+  } else if (name === 'face') {
+    // Mara faces south, toward the camera; Monas and the crowd are behind her
+    putPlayer(G, 0, 30, 0);
+    // crowd gathers around Mara so the close-up has the city behind her
+    for (let i = 0; i < 8; i++) {
+      const ped = G.peds[36 + i];
+      if (ped) {
+        ped.mesh.position.set(-8 + i * 2.2, 0, 20 + (i % 3) * 2);
+        ped.heading = 0; ped.mesh.rotation.y = 0;
+        ped.pause = 6;
+      }
+    }
+    G.shotCam = { pos: [0, 1.7, 32.6], look: [0, 1.55, 30] };
+    runSim(G, 1.2, null);
+  } else if (name === 'collision') {
+    const car = G.traffic.find((c) => c.owned);
+    putPlayerInCar(G, car, 0, 40, Math.PI);
+    G.shotCam = { pos: [6, 3.5, 52], look: [0, 1, 20] };
+    runSim(G, 3, { up: true });
+  } else if (name === 'busy') {
+    const car = G.traffic.find((c) => c.owned);
+    putPlayerInCar(G, car, -100, 42.8, Math.PI / 2);
+    // pack the avenue: pull nearby traffic onto the Sudirman road
+    let placed = 0;
+    for (const t of G.traffic) {
+      if (t.owned || !t.road) continue;
+      if (placed >= 8) break;
+      t.road = 'z'; t.roadCoord = 46; t.dir = placed % 2 === 0 ? 1 : -1;
+      t.mesh.position.set(-60 + placed * 18, 0, 46 + (t.dir > 0 ? 3.5 : -3.5));
+      t.heading = t.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+      t.mesh.rotation.y = t.heading;
+      placed++;
+    }
+    G.shotCam = { pos: [-118, 5, 58], look: [-60, 1.5, 44] };
+    runSim(G, 2, { up: true });
+  } else if (name === 'weapons') {
+    P.arsenal = {
+      pistol: { mag: 12, reserve: 24 },
+      smg: { mag: 30, reserve: 60 },
+      shotgun: { mag: 6, reserve: 12 },
+      rifle: { mag: 30, reserve: 60 },
+    };
+    P.weapon = 'rifle';
+    putPlayer(G, 0, 70, 0);
+    // a ped ahead of Mara to flinch and flee
+    const ped = G.peds[0];
+    ped.mesh.position.set(2, 0, 56);
+    ped.heading = Math.PI; ped.mesh.rotation.y = Math.PI;
+    ped.pause = 9;
+    G.shotCam = { pos: [-4, 3.2, 80], look: [0, 1.4, 60] };
+    G.autoFire = true;
+    runSim(G, 1.5, null);
+    G.autoFire = false;
+    G.muzzleFlash = 0.25;
+  } else if (name === 'golden') {
+    G.hour = 17.6;
+    putPlayer(G, 30, 30, Math.PI * 0.8);
+    // a browsing buyer at the BAKSO MALANG cart so the vendor serves
+    const ped = G.peds[36];
+    ped.mesh.position.set(54, 0, 2);
+    ped.targetX = 54; ped.targetZ = 2; ped.pause = 8;
+    G.shotCam = { pos: [18, 3.5, 52], look: [48, 1.5, 6] };
+    runSim(G, 2, null);
+  } else {
+    // unknown name -> start shot
+    G.mode = 'title';
+    G.shotCam = { pos: [95, 26, 165], look: [0, 42, 0] };
+    runSim(G, 2, null);
   }
-  // play: golden-hour drive down Jl. Sudirman to a marker, past the halte.
-  G.hour = 16.2; G.weather = 'clear';
-  const car = G.traffic.find((c) => c.kind === 'sedan') || G.traffic[1] || G.traffic[0];
-  enterCar(G, car);
-  car.mesh.position.set(-140, 0, 42.8); car.heading = Math.PI / 2; car.speed = 14;
-  car.mesh.rotation.y = car.heading;
-  G.missions.active = null;
-  G.missions.marker.group.position.set(190, 0, 46);
-  G.missions.marker.group.visible = true;
-  G.hud.setObjective('Gig: Jemput penumpang di Monas — ikuti marker');
-  G.camMode = 'chase';
-  return { seconds: 6 }; // 6 s puts the car just past the Monas plaza slab (which
-  // covers the road at |x|<48); shorter stops the car sunk in the plaza
-}
 
-function enterCar(G, car) {
-  const p = G.player;
-  car.driver = true;
-  p.inCar = car;
-  p.mesh.visible = false;
-  p.pos.copy(car.mesh.position);
-}
-
-/** After the chase sim, pull the pursuit into the camera frame: a police
- *  roadblock ahead of the player and the helicopter overhead in view. */
-export function frameChase(G) {
-  const p = G.player;
-  const car = p.inCar;
-  if (!car) return;
-  const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
-  const px = car.mesh.position.x, pz = car.mesh.position.z;
-  G.police.cops.forEach((cop, i) => {
-    const side = i % 2 === 0 ? 6 : -6;
-    const ahead = 18 + i * 6;
-    cop.mesh.position.set(px + fx * ahead - fz * side, 0, pz + fz * ahead + fx * side);
-    cop.heading = car.heading + Math.PI;
-    cop.mesh.rotation.y = cop.heading;
-    cop.speed = 0;
-    if (cop.lightBar) cop.lightBar.visible = true; // flashing bars on for the shot
-  });
-  if (G.police.heli) {
-    const h = G.police.heli;
-    // Over the road corridor (open sky), so no building occludes it.
-    h.mesh.position.set(px + fx * 40, 18, pz + fz * 40);
-    h.mesh.scale.setScalar(1.0);
-    h.mesh.rotation.y = Math.atan2(px - h.mesh.position.x, pz - h.mesh.position.z);
+  G.police.frozen = true;
+  G.shotDone = true;
+  // only the start shot shows the title screen; every other shot is pure gameplay
+  if (G.hud) {
+    G.hud.showTitle(name === 'start');
+    G.hud.showPause(false); G.hud.showBusted(false); G.hud.showWasted(false);
   }
-  G.police.frozen = true; // hold the staged pursuit for the screenshot
-}
-
-/** Autopilot: drive the player's car toward the mission marker (or straight
- *  down the road when there is none), steering gently, braking for turns. */
-export function autopilotDrive(G, input, dt) {
-  const p = G.player;
-  const car = p.inCar;
-  if (!car) return;
-  const m = G.missions.marker;
-  let tx = car.mesh.position.x + Math.sin(car.heading) * 60;
-  let tz = car.mesh.position.z + Math.cos(car.heading) * 60;
-  if (m.group.visible) { tx = m.group.position.x; tz = m.group.position.z; }
-  const want = Math.atan2(tx - car.mesh.position.x, tz - car.mesh.position.z);
-  const diff = angleDiff(car.heading, want);
-  input.forward = true;
-  // v4: a staged shot may cap the cruise speed (the busy shot crawls in the
-  // jam at 8 m/s instead of flooring it to 34).
-  if (G.shotTopSpeed && car.speed >= G.shotTopSpeed) input.forward = false;
-  input.back = false;
-  input.left = diff > 0.12;
-  input.right = diff < -0.12;
-  input.handbrake = Math.abs(diff) > 0.9;
-  const d = dist2D(car.mesh.position.x, car.mesh.position.z, tx, tz);
-  if (d < 12) input.forward = false;
+  return { mode: G.mode };
 }

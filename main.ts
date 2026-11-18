@@ -1,12 +1,12 @@
-// JAKARTA — Streets of the Afternoon, a gta6-01 entry (Node 22, standard library only).
-// v2: the city is Jakarta, the economy is rupiah, the default hour is the golden
-// afternoon (16:30). v4: faces for every character, solid buildings, a CJ-style
-// arsenal, Los Santos bustle (denser traffic, honking, billboards, neon,
-// traffic lights), and the visual benchmark's glass towers with retail podiums.
-// The program hands the game in: it copies this repository's
-// game/ and screenshots/ beside this file to /output and writes
-// /output/dossier.json with the vendored make.fun library, exactly as the kit's
-// starter does. Outside the grader, MAKEFUN_OUTPUT_DIR stands in for /output:
+// JAKARTA — Streets of the Afternoon (gta6-01): the hand-in program.
+// Node 22, standard library only. It copies game/ and screenshots/ from
+// beside this file to /output and writes /output/dossier.json with the
+// vendored make.fun library, exactly as the kit's starter does — the only
+// difference is the game it hands in: a full open-world crime game in
+// Jakarta, not the starter's Block Dodger.
+//
+// Serve it locally with `node serve.ts`, then open http://localhost:8080.
+// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -21,12 +21,15 @@ mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });
 if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
-console.log(`JAKARTA v4: handing in game/ + screenshots/ to ${out}`);
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes;
-// the others refuse an entry the scorer would refuse (more than 4 screenshots or
-// one over 256 KiB; more than 993 files in game/ or 48 MiB of game files, in all,
-// or a path under game/ over 1000 bytes).
+// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the
+// bytes; the others refuse an entry the scorer would refuse (more than 4
+// screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of
+// game files, in all, or a path under game/ over 1000 bytes: game/ counts
+// beside /output's own 1000-entry cap, its screenshots/ and dossier.json).
+// The reading copy of the source is capped at 160 KiB by construction:
+// buildDossier keeps the core files (main, city, vehicles, player, police,
+// util) and truncates the tail; the game itself ships complete in game/.
 writeFileSync(
   join(out, 'dossier.json'),
   buildDossier(out, {
