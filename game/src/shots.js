@@ -1,6 +1,7 @@
-// shots.js — staging for the four screenshots. Each shot is the real game
-// running: the same world, the same rules, steered by a small autopilot
-// that drives toward the mission marker and keeps off the sidewalks.
+// shots.js — staging for the four screenshots, all in the Jakarta
+// golden hour (16:30–17:30). Each shot is the real game running: the same
+// world, the same rules, steered by a small autopilot that drives toward
+// the mission marker and keeps off the sidewalks.
 // ?shot=start|play|chase|mission (with &seed=N) stages that scene,
 // paints it twice and sets window.__shotReady.
 import { dist2D, angleDiff } from './util.js';
@@ -9,53 +10,53 @@ import { startStoryMission } from './missions.js';
 
 export const SHOT_NAMES = ['start', 'play', 'chase', 'mission'];
 
-/** Place the world for a shot: time of day, weather, wanted level, story. */
+/** Place the world for a shot: golden-hour time, weather, wanted level, story. */
 export function placeForShot(G, name) {
   const p = G.player;
   G.missions.gigCd = 999; // no random gig spawns during a staged shot
   if (name === 'start') {
-    G.hour = 17.2; G.weather = 'clear';
+    G.hour = 16.6; G.weather = 'clear'; // golden hour over Monas
     p.pos.set(60, 0, 120); p.heading = Math.PI * 0.75;
     G.camMode = 'cinematic';
     return { seconds: 0 };
   }
   if (name === 'mission') {
-    G.hour = 17.3; G.weather = 'clear';
-    // Mara walks up to the garage with the marker dead ahead.
+    G.hour = 16.4; G.weather = 'clear';
+    // Mara walks up to the bengkel with the marker dead ahead.
     p.pos.set(-138, 0, -196); p.heading = -0.26;
     p.inCar = null; p.mesh.visible = true;
     p.mesh.position.copy(p.pos);
     startStoryMission(G, 0);
-    // Pull the marker to the garage forecourt so its beam reads over the roofs.
+    // Pull the marker to the bengkel forecourt so its beam reads over the roofs.
     G.missions.marker.group.position.set(-150, 0, -181);
     G.camMode = 'follow';
     G.camYaw = -0.26;
     return { seconds: 1.0 };
   }
   if (name === 'chase') {
-    G.hour = 16.9; G.weather = 'clear';
-    // Mara in a fast car on the central boulevard (road z = 46), cops on her.
-    const car = G.traffic[0];
+    G.hour = 16.5; G.weather = 'clear';
+    // Mara in a fast sedan on the central boulevard (road z = 46), cops on her.
+    const car = G.traffic.find((c) => c.kind === 'sedan') || G.traffic[0];
     enterCar(G, car);
     car.mesh.position.set(-60, 0, 42.8); car.heading = Math.PI / 2; car.speed = 24;
     car.mesh.rotation.y = car.heading;
     addWanted(G.police, 65, 0);
     G.police.spawnCd = 0;
     G.missions.marker.group.visible = false;
-    G.hud.setObjective('WANTED ★★★★ — lose the Solmara PD!');
+    G.hud.setObjective('DICARI ★★★★ — kabur dari polisi Jakarta!');
     G.camMode = 'chase';
     return { seconds: 7 };
   }
-  // play: midday drive downtown, straight down the boulevard to a marker.
-  G.hour = 10.5; G.weather = 'clear';
-  const car = G.traffic[1] || G.traffic[0];
+  // play: golden-hour drive down Jl. Sudirman to a marker, past the halte.
+  G.hour = 16.2; G.weather = 'clear';
+  const car = G.traffic.find((c) => c.kind === 'sedan') || G.traffic[1] || G.traffic[0];
   enterCar(G, car);
   car.mesh.position.set(-140, 0, 42.8); car.heading = Math.PI / 2; car.speed = 14;
   car.mesh.rotation.y = car.heading;
   G.missions.active = null;
   G.missions.marker.group.position.set(190, 0, 46);
   G.missions.marker.group.visible = true;
-  G.hud.setObjective('Gig: Pick up the passenger at Sol Plaza — follow the marker');
+  G.hud.setObjective('Gig: Jemput penumpang di Monas — ikuti marker');
   G.camMode = 'chase';
   return { seconds: 6 };
 }

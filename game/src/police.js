@@ -1,5 +1,7 @@
-// police.js — the Solmara PD wanted system: stars, patrol cars that ram
+// police.js — the Jakarta police wanted system: stars, patrol cars that ram
 // and box the player in, and a helicopter once the heat reaches three stars.
+// EASY (v2): while a story job is active (police.storyMode), the pursuit is
+// capped at 2 cops, slower, and the heat cools off faster.
 import * as THREE from 'three';
 import { clamp, lerp, angleLerp, angleDiff, dist2D } from './util.js';
 import { CITY } from './city.js';
@@ -11,10 +13,13 @@ export function createPolice(scene) {
     cops: [], heli: null, heliActive: false,
     bustTimer: 0, sirenPhase: 0,
     spawnCd: 0, lastCrimeAt: -999,
+    storyMode: false, // set by missions during story jobs: gentle pursuit
   };
 }
 
 export function addWanted(police, amount, now) {
+  // Story jobs add less heat than free-roam crime.
+  if (police.storyMode) amount *= 0.6;
   police.heat = clamp(police.heat + amount, 0, 100);
   police.wanted = Math.ceil(police.heat / 20);
   police.lastCrimeAt = now;
@@ -67,13 +72,15 @@ function removeHeli(scene, police) {
 export function updatePolice(police, scene, player, playerCar, now, dt) {
   const px = player.pos.x, pz = player.pos.z;
   const speed = playerCar ? Math.abs(playerCar.speed) : player.speed;
-  // Heat cools off when the player is slow and out of sight of cops.
+  // Heat cools off when the player is slow and out of sight of cops —
+  // twice as fast during story jobs, so a small mistake never ruins a job.
   if (now - police.lastCrimeAt > 12 && speed < 3 && police.cops.length === 0) {
-    police.heat = Math.max(0, police.heat - dt * 2.5);
+    police.heat = Math.max(0, police.heat - dt * (police.storyMode ? 5 : 2.5));
     police.wanted = Math.ceil(police.heat / 20);
   }
-  const wantCops = police.wanted === 0 ? 0 : police.wanted === 1 ? 1 : police.wanted === 2 ? 2
+  let wantCops = police.wanted === 0 ? 0 : police.wanted === 1 ? 1 : police.wanted === 2 ? 2
     : police.wanted === 3 ? 3 : police.wanted === 4 ? 4 : 5;
+  if (police.storyMode) wantCops = Math.min(wantCops, 2); // story jobs: max 2 cops
   police.spawnCd -= dt;
   if (police.cops.length < wantCops && police.spawnCd <= 0) {
     police.spawnCd = 2.5;
@@ -85,6 +92,7 @@ export function updatePolice(police, scene, player, playerCar, now, dt) {
   if (police.wanted < 3 && police.heliActive) removeHeli(scene, police);
 
   // Cop pursuit: steer toward the player, ram, and slow them down.
+  // In story mode the cops are slower and their ram is softer.
   police.sirenPhase += dt * 6;
   if (police.frozen) return null;
   for (let i = police.cops.length - 1; i >= 0; i--) {
@@ -93,7 +101,8 @@ export function updatePolice(police, scene, player, playerCar, now, dt) {
     const d = dist2D(cx, cz, px, pz);
     const want = Math.atan2(px - cx, pz - cz);
     cop.heading = angleLerp(cop.heading, want, clamp(dt * 1.6, 0, 1));
-    const targetSpeed = d > 60 ? 30 : d > 25 ? 26 : 20;
+    const slow = police.storyMode ? 0.75 : 1;
+    const targetSpeed = (d > 60 ? 30 : d > 25 ? 26 : 20) * slow;
     cop.speed = lerp(cop.speed, targetSpeed, clamp(dt, 0, 1));
     cop.mesh.position.x += Math.sin(cop.heading) * cop.speed * dt;
     cop.mesh.position.z += Math.cos(cop.heading) * cop.speed * dt;
@@ -102,12 +111,12 @@ export function updatePolice(police, scene, player, playerCar, now, dt) {
     // Ram: shove the player car and damage the player on foot.
     if (d < 4.5) {
       if (playerCar) {
-        playerCar.speed *= 0.86;
+        playerCar.speed *= police.storyMode ? 0.93 : 0.86;
         playerCar.mesh.position.x += Math.sin(cop.heading) * 2.2;
         playerCar.mesh.position.z += Math.cos(cop.heading) * 2.2;
         addWanted(police, 0, now);
       } else if (player.hurtCd <= 0) {
-        player.health -= 8; player.hurtCd = 0.6;
+        player.health -= police.storyMode ? 4 : 8; player.hurtCd = 0.6;
       }
       cop.speed *= 0.5;
     }
@@ -123,14 +132,15 @@ export function updatePolice(police, scene, player, playerCar, now, dt) {
     h.target.position.set(px - h.mesh.position.x, -h.height, pz - h.mesh.position.z);
     h.spot.target = h.target;
   }
-  // Busted: a cop stays on top of a slow player on foot.
+  // Busted: a cop stays on top of a slow player on foot. Story mode gives
+  // the player longer (4 s) before the bust lands.
   if (!playerCar && police.wanted > 0 && speed < 1) {
     let near = false;
     for (const cop of police.cops) {
       if (dist2D(cop.mesh.position.x, cop.mesh.position.z, px, pz) < 5) near = true;
     }
     police.bustTimer = near ? police.bustTimer + dt : 0;
-    if (police.bustTimer > 2.5) {
+    if (police.bustTimer > (police.storyMode ? 4 : 2.5)) {
       police.wanted = 0; police.heat = 0; police.bustTimer = 0;
       return 'busted';
     }
@@ -144,4 +154,5 @@ export function clearPolice(scene, police) {
   police.cops = [];
   removeHeli(scene, police);
   police.wanted = 0; police.heat = 0;
+  police.storyMode = false;
 }

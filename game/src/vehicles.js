@@ -1,42 +1,65 @@
-// vehicles.js — cars of Solmara: boxy original builds, arcade driving,
-// and traffic that follows the street grid. All original.
+// vehicles.js — cars of Jakarta: boxy original builds, arcade driving,
+// and traffic that follows the street grid — sedans, pickups, TransJakarta
+// buses and teal angkot minivans. All original.
 import * as THREE from 'three';
 import { mulberry32, rand, pick, clamp, lerp, angleLerp, angleDiff, dist2D } from './util.js';
 import { CITY, nearestRoadCoord, isOnRoad } from './city.js';
 
 export const CAR_COLORS = [0xc23b2e, 0x2e6fc2, 0xe8b93b, 0x3aa655, 0xe8e4da, 0x22242a, 0x8a4fbf, 0xe87a2e, 0x4fc2c2];
 export const CAR_NAMES = ['Comet', 'Dune', 'Vagabond', 'Falcon', 'Pinto', 'Cruiser', 'Lowrider', 'Pickup', 'Van'];
+export const BUS_COLORS = [0xe87a2e, 0xc23b2e]; // TransJakarta orange-red
+export const ANGKOT_COLORS = [0x2e8f8f, 0x3aa655, 0xe8b93b]; // teal / green / yellow minivans
 
-/** Build a stylised car from boxes. `police` adds a light bar. */
+/** Build a stylised vehicle from boxes. `police` adds a light bar. Kinds:
+ *  sedan | pickup | van | bus (long TransJakarta) | angkot (small minivan). */
 export function buildCarMesh(color, kind = 'sedan', police = false) {
   const g = new THREE.Group();
   const bodyMat = new THREE.MeshLambertMaterial({ color });
   const darkMat = new THREE.MeshLambertMaterial({ color: 0x1a2028 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2, 0.65, kind === 'van' ? 5.2 : 4.4), bodyMat);
-  body.position.y = 0.65; g.add(body);
-  const cabinH = kind === 'van' ? 1.0 : 0.55;
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, cabinH, kind === 'van' ? 3.4 : 2.2), darkMat);
-  cabin.position.set(0, 1.15, kind === 'pickup' ? -0.7 : 0.1); g.add(cabin);
+  const len = kind === 'bus' ? 8.4 : kind === 'angkot' ? 3.6 : kind === 'van' ? 5.2 : 4.4;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.1, kind === 'bus' ? 1.5 : 0.65, len), bodyMat);
+  body.position.y = kind === 'bus' ? 1.35 : 0.65; g.add(body);
+  if (kind === 'bus') {
+    // TransJakarta: big windows band + orange stripe, "TRANSJAKARTA" feel via stripe.
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.9, len - 1), darkMat);
+    glass.position.y = 2.2; g.add(glass);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.16, 0.3, len),
+      new THREE.MeshLambertMaterial({ color: 0xffd23b }));
+    stripe.position.y = 1.35; g.add(stripe);
+  } else if (kind === 'angkot') {
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.8, 2.6), darkMat);
+    cabin.position.set(0, 1.3, 0); g.add(cabin);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.22, 3.6),
+      new THREE.MeshLambertMaterial({ color: 0xffd23b }));
+    stripe.position.y = 0.95; g.add(stripe);
+  } else {
+    const cabinH = kind === 'van' ? 1.0 : 0.55;
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, cabinH, kind === 'van' ? 3.4 : 2.2), darkMat);
+    cabin.position.set(0, 1.15, kind === 'pickup' ? -0.7 : 0.1); g.add(cabin);
+  }
   if (kind === 'pickup') {
     const bed = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.4, 1.6), bodyMat);
     bed.position.set(0, 1.0, 1.3); g.add(bed);
   }
-  const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.3, 10);
+  const wheelGeo = new THREE.CylinderGeometry(kind === 'bus' ? 0.5 : 0.38, kind === 'bus' ? 0.5 : 0.38, 0.3, 10);
   const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111214 });
-  const wheelPos = [[-0.95, -1.45], [0.95, -1.45], [-0.95, 1.45], [0.95, 1.45]];
+  const wheelPos = kind === 'bus'
+    ? [[-0.95, -3.2], [0.95, -3.2], [-0.95, 0.6], [0.95, 0.6], [-0.95, 3.2], [0.95, 3.2]]
+    : [[-0.95, -1.45], [0.95, -1.45], [-0.95, 1.45], [0.95, 1.45]];
   const wheels = [];
   for (const [wx, wz] of wheelPos) {
     const w = new THREE.Mesh(wheelGeo, wheelMat);
     w.rotation.z = Math.PI / 2;
-    w.position.set(wx, 0.38, wz); g.add(w); wheels.push(w);
+    w.position.set(wx, kind === 'bus' ? 0.5 : 0.38, wz); g.add(w); wheels.push(w);
   }
   const lightMat = new THREE.MeshBasicMaterial({ color: 0xfff2b0 });
+  const front = len / 2 + 0.02;
   for (const sx of [-0.6, 0.6]) {
     const hl = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.18, 0.1), lightMat);
-    hl.position.set(sx, 0.75, kind === 'van' ? 2.62 : 2.22); g.add(hl);
+    hl.position.set(sx, kind === 'bus' ? 1.1 : 0.75, front); g.add(hl);
     const tl = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.18, 0.1),
       new THREE.MeshBasicMaterial({ color: 0xff2a2a }));
-    tl.position.set(sx, 0.75, kind === 'van' ? -2.62 : -2.22); g.add(tl);
+    tl.position.set(sx, kind === 'bus' ? 1.1 : 0.75, -front); g.add(tl);
   }
   let lightBar = null;
   if (police) {
@@ -51,30 +74,35 @@ export function buildCarMesh(color, kind = 'sedan', police = false) {
   }
   // Blob shadow: cheap grounding without a shadow map.
   const shadow = new THREE.Mesh(
-    new THREE.CircleGeometry(2.2, 12),
+    new THREE.CircleGeometry(kind === 'bus' ? 3.4 : 2.2, 12),
     new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28 }),
   );
-  shadow.rotation.x = -Math.PI / 2; shadow.scale.set(1, 1.9, 1); shadow.position.y = 0.03;
+  shadow.rotation.x = -Math.PI / 2; shadow.scale.set(1, kind === 'bus' ? 2.6 : 1.9, 1); shadow.position.y = 0.03;
   g.add(shadow);
   return { group: g, wheels, lightBar };
 }
 
-export function createTraffic(scene, seed, count = 14) {
+export function createTraffic(scene, seed, count = 16) {
   const rng = mulberry32(seed ^ 0x9e37);
   const half = CITY.half;
   const cars = [];
   for (let i = 0; i < count; i++) {
-    const kind = pick(rng, ['sedan', 'sedan', 'sedan', 'pickup', 'van']);
-    const { group } = buildCarMesh(pick(rng, CAR_COLORS), kind);
+    // Jakarta traffic: mostly sedans, plus TransJakarta buses and angkot.
+    const roll = rng();
+    const kind = roll < 0.14 ? 'bus' : roll < 0.34 ? 'angkot' : pick(rng, ['sedan', 'sedan', 'sedan', 'pickup', 'van']);
+    const color = kind === 'bus' ? pick(rng, BUS_COLORS)
+      : kind === 'angkot' ? pick(rng, ANGKOT_COLORS) : pick(rng, CAR_COLORS);
+    const { group } = buildCarMesh(color, kind);
     const vertical = rng() < 0.5;
     const lane = (rng() < 0.5 ? -1 : 1) * 3.2;
     const road = -half + Math.floor(rand(rng, 0, CITY.blocks + 1)) * (CITY.block + CITY.road);
     const along = rand(rng, -half, half);
+    const maxSpeed = kind === 'bus' ? rand(rng, 7, 10) : kind === 'angkot' ? rand(rng, 8, 12) : rand(rng, 9, 14);
     const car = {
-      mesh: group, kind, speed: rand(rng, 7, 12), maxSpeed: rand(rng, 9, 14),
+      mesh: group, kind, speed: rand(rng, 6, 11), maxSpeed,
       heading: vertical ? (lane > 0 ? 0 : Math.PI) : (lane > 0 ? Math.PI / 2 : -Math.PI / 2),
       vertical, lane, road, along, driver: true, stolen: false, hp: 100,
-      name: pick(rng, CAR_NAMES),
+      name: kind === 'bus' ? 'TransJakarta' : kind === 'angkot' ? 'Angkot' : pick(rng, CAR_NAMES),
     };
     car.mesh.position.set(vertical ? road + lane : along, 0, vertical ? along : road + lane);
     car.mesh.rotation.y = car.heading;
@@ -135,6 +163,7 @@ export function driveCar(car, input, dt) {
   if (input.handbrake) car.speed = lerp(car.speed, 0, clamp(dt * 5, 0, 1));
   const steer = (input.left ? 1 : 0) - (input.right ? 1 : 0);
   const dir = car.speed >= 0 ? 1 : -1;
+  // Wet Jakarta roads after the rain: a little less grip off the asphalt.
   const grip = isOnRoad(car.mesh.position.x, car.mesh.position.z) ? 1 : 0.45;
   car.heading += steer * clamp(Math.abs(car.speed) / 12, 0, 1) * 1.9 * dir * grip * dt;
   const nx = car.mesh.position.x + Math.sin(car.heading) * car.speed * dt;
@@ -144,7 +173,7 @@ export function driveCar(car, input, dt) {
   car.mesh.position.x = clamp(nx, -half - 20, half + 60);
   car.mesh.position.z = clamp(nz, -half - 20, half + 20);
   if (car.mesh.position.x > half + 6 && Math.abs(car.mesh.position.z) > 14) {
-    // The river: only the bridge (z near 0) crosses.
+    // Kali Ciliwung: only the bridge (z near 0) crosses.
     car.mesh.position.x = half + 6;
     car.speed *= 0.4;
   }

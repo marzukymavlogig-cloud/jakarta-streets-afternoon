@@ -1,4 +1,4 @@
-// main.js — SOLMARA boot, game loop, camera, input, carjacking, combat,
+// main.js — JAKARTA boot, game loop, camera, input, carjacking, combat,
 // menus, day-night clock and the screenshot staging hook.
 // Original code, written for this entry.
 import * as THREE from 'three';
@@ -11,7 +11,7 @@ import { createHud } from './hud.js';
 import { createAudio } from './audio.js';
 import { createSave } from './save.js';
 import { placeForShot, autopilotDrive, frameChase, SHOT_NAMES } from './shots.js';
-import { clamp, lerp, angleLerp, dist2D, mulberry32 } from './util.js';
+import { clamp, lerp, angleLerp, dist2D, mulberry32, formatRp } from './util.js';
 
 const params = new URLSearchParams(window.location.search);
 const shotName = params.get('shot');
@@ -24,6 +24,11 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+// Afternoon realism: filmic tone mapping + soft shadows for the low sun.
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.22;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 3000);
@@ -43,7 +48,7 @@ const starter = buildCarMesh(0x3aa655, 'sedan');
 starter.group.position.set(SPOTS.garage.x + 8, 0, SPOTS.garage.z + 18);
 starter.group.rotation.y = Math.PI / 2;
 scene.add(starter.group);
-traffic.push({ mesh: starter.group, kind: 'sedan', speed: 0, heading: Math.PI / 2, driver: false, stolen: false, hp: 100, name: 'Voss Sedan', owned: true });
+traffic.push({ mesh: starter.group, kind: 'sedan', speed: 0, heading: Math.PI / 2, driver: false, stolen: false, hp: 100, name: 'Sedan Bengkel', owned: true });
 
 // Pistol pickup at the garage.
 const pickup = new THREE.Group();
@@ -54,12 +59,13 @@ scene.add(pickup);
 
 const G = {
   scene, camera, renderer, city, player, traffic, peds, police, missions,
-  hud: null, audio, save, now: 0, hour: 10.5, weather: 'clear',
+  hud: null, audio, save, now: 0, hour: 16.5, weather: 'clear', // golden hour
   mode: 'title', camYaw: Math.PI * 0.8, camPitch: 0.32, camDist: 13,
   camMode: 'follow', weatherTimer: 90, shot: shotName,
 };
 G.hud = createHud(G);
-window.__solmara = G; // debug handle for playtesting (read-only inspection)
+window.__jakarta = G; // debug handle for playtesting (read-only inspection)
+window.__solmara = G; // v1 alias, kept so old tooling keeps working
 
 // ---- Input ----
 const keys = new Set();
@@ -120,14 +126,14 @@ function tryInteract() {
     player.pos.set(car.mesh.position.x + 3, 0, car.mesh.position.z + 1);
     player.mesh.visible = true;
     player.mesh.position.copy(player.pos);
-    G.hud.toast('ON FOOT', 'You left the car.');
+    G.hud.toast('JALAN KAKI', 'Kamu turun dari mobil.');
     return;
   }
   // Pistol pickup.
   if (dist2D(player.pos.x, player.pos.z, pickup.position.x, pickup.position.z) < 3 && player.weapon === 'fists') {
     player.weapon = 'pistol'; player.ammo = 24;
     pickup.visible = false;
-    G.hud.toast('PISTOL', 'F to fire. 24 rounds. The PD will notice.');
+    G.hud.toast('PISTOL', 'F untuk menembak. 24 peluru. Polisi akan datang.');
     return;
   }
   // Dealership.
@@ -140,10 +146,10 @@ function tryInteract() {
     if (car.driver) {
       car.driver = false;
       addWanted(police, 20, G.now);
-      G.hud.toast('CARJACKED', `You took the ${car.name}. The owner called the PD.`);
+      G.hud.toast('BAJAK MOBIL', `Kamu mengambil ${car.name}. Pemiliknya lapor polisi.`);
       audio.thud();
     }
-    if (car.gold) G.hud.toast('THE COMET', 'Floor it — the whole city is watching.');
+    if (car.gold) G.hud.toast('COMET EMAS', 'Gaspol — satu Jakarta lagi nonton.');
     player.inCar = car;
     player.mesh.visible = false;
     car.speed = 0;
@@ -175,9 +181,9 @@ function punchOrShoot() {
         best.ped.mesh.position.x += fx * 3; best.ped.mesh.position.z += fz * 3;
       }
       if (best.cop) best.cop.speed = 0;
-      G.hud.toast('SHOT FIRED', 'The PD is on its way.');
+      G.hud.toast('TEMBAKAN', 'Polisi sedang menuju ke sini.');
     }
-    if (player.ammo === 0) { player.weapon = 'fists'; G.hud.toast('OUT OF AMMO', 'Back to fists.'); }
+    if (player.ammo === 0) { player.weapon = 'fists'; G.hud.toast('PELURU HABIS', 'Balik ke tangan kosong.'); }
     return;
   }
   // Punch.
@@ -203,7 +209,7 @@ function startGame(fresh) {
   audio.ensure();
   if (fresh) {
     save.clear();
-    player.cash = 250; player.health = 100;
+    player.cash = 250000; player.health = 100; // Rp250.000 to start the afternoon
     missions.storyIndex = 0; missions.storyDone = false; missions.owned = [];
     player.pos.set(60, 0, 120); player.heading = 0;
     clearPolice(scene, police);
@@ -213,7 +219,7 @@ function startGame(fresh) {
       player.cash = data.cash; player.health = data.health;
       missions.storyIndex = data.storyIndex || 0;
       missions.storyDone = !!data.storyDone;
-      G.hour = data.hour ?? 10.5; G.weather = data.weather || 'clear';
+      G.hour = data.hour ?? 16.5; G.weather = data.weather || 'clear';
       player.pos.set(data.x ?? 60, 0, data.z ?? 120);
       player.mesh.position.copy(player.pos);
     }
@@ -222,18 +228,18 @@ function startGame(fresh) {
   showScreen(null);
   G.hud.setRadio(audio.stationName());
   G.hud.setWeather(G.weather);
-  G.hud.setObjective(missions.storyDone ? 'Free roam — gigs, dealership, and the city are yours.'
-    : 'Press M to start the next story job. Yellow markers are gigs.');
-  G.hud.toast('SOLMARA', 'Mara Voss is home. Make the city pay — or make it yours.');
+  G.hud.setObjective(missions.storyDone ? 'Jalan-jalan — gig, dealer, dan kota milikmu.'
+    : 'Tekan M untuk mulai job cerita berikutnya. Marker kuning adalah gig.');
+  G.hud.toast('JAKARTA', 'Mara pulang. Selamatkan bengkel — atau kuasai kota ini.');
 }
 $('btn-new').addEventListener('click', () => startGame(true));
 $('btn-continue').addEventListener('click', () => startGame(false));
 $('btn-freeroam').addEventListener('click', () => startGame(true));
 $('btn-resume').addEventListener('click', togglePause);
-$('btn-save').addEventListener('click', () => { save.save(G); G.hud.toast('SAVED', 'Progress saved to this browser.'); });
+$('btn-save').addEventListener('click', () => { save.save(G); G.hud.toast('TERSIMPAN', 'Progress tersimpan di browser ini.'); });
 $('btn-restart').addEventListener('click', () => { startGame(true); });
 $('btn-dead').addEventListener('click', () => {
-  player.health = 100; player.cash = Math.max(0, player.cash - 100);
+  player.health = 100; player.cash = Math.max(0, player.cash - 100000);
   clearPolice(scene, police);
   player.pos.set(SPOTS.garage.x, 0, SPOTS.garage.z);
   player.mesh.position.copy(player.pos);
@@ -254,17 +260,17 @@ function openShop() {
     const row = document.createElement('div');
     row.className = 'shop-row';
     row.innerHTML = `<span class="swatch" style="background:#${car.color.toString(16).padStart(6, '0')}"></span>
-      <b>${car.name}</b><span>$${car.price}</span>
-      <button data-i="${i}">${missions.owned.includes(car.name) ? 'OWNED' : 'BUY'}</button>`;
+      <b>${car.name}</b><span>${formatRp(car.price)}</span>
+      <button data-i="${i}">${missions.owned.includes(car.name) ? 'PUNYA' : 'BELI'}</button>`;
     row.querySelector('button').addEventListener('click', (e) => {
       const msg = buyShopCar(G, Number(e.target.dataset.i));
       $('shop-msg').textContent = msg;
-      G.hud.setObjective(`Cash $${Math.floor(player.cash)} — ${msg}`);
+      G.hud.setObjective(`Uang ${formatRp(player.cash)} — ${msg}`);
       openShop();
     });
     list.appendChild(row);
   });
-  $('shop-cash').textContent = `Your cash: $${Math.floor(player.cash)}`;
+  $('shop-cash').textContent = `Uang kamu: ${formatRp(player.cash)}`;
   $('shop-msg').textContent = '';
 }
 
@@ -319,16 +325,16 @@ function stepWorld(dt) {
   updatePedestrians(peds, danger, dt);
   const result = updatePolice(police, scene, player, player.inCar, G.now, dt);
   if (result === 'busted') {
-    player.cash = Math.max(0, player.cash - 150);
+    player.cash = Math.max(0, player.cash - 150000);
     player.pos.set(SPOTS.garage.x, 0, SPOTS.garage.z);
     player.mesh.position.copy(player.pos);
     player.mesh.visible = true; player.inCar = null;
-    G.mode = 'dead'; $('dead-title').textContent = 'BUSTED';
-    $('dead-text').textContent = 'The Solmara PD took $150 and dropped you at the garage.';
+    G.mode = 'dead'; $('dead-title').textContent = 'KETANGKAP';
+    $('dead-text').textContent = 'Polisi Jakarta mengambil Rp150.000 dan mengantarmu ke bengkel.';
     showScreen('dead');
   } else if (result === 'wasted') {
-    G.mode = 'dead'; $('dead-title').textContent = 'WASTED';
-    $('dead-text').textContent = 'Mara went down. The garage is still waiting.';
+    G.mode = 'dead'; $('dead-title').textContent = 'TEWAS';
+    $('dead-text').textContent = 'Mara tumbang. Bengkel masih menunggu.';
     showScreen('dead');
   }
   updateMissions(G, dt);

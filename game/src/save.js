@@ -1,6 +1,7 @@
-// save.js — localStorage save for SOLMARA: cash, health, story progress,
-// owned cars, garage, and the time of day. Save early, save often.
-export const SAVE_KEY = 'solmara-save-v1';
+// save.js — localStorage save for JAKARTA: rupiah cash, health, story
+// progress, owned cars, garage, and the time of day. Save early, save often.
+// v2 key: the Jakarta save does not pick up the old Solmara v1 save.
+export const SAVE_KEY = 'jakarta-save-v1';
 
 export function createSave() {
   return {

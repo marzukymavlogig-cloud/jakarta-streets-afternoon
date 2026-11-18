@@ -1,11 +1,41 @@
 // audio.js — all sound is synthesised live with WebAudio: engine hum,
-// sirens, impacts, and three procedural radio stations. No audio files.
+// sirens, impacts, and three procedural Indonesian radio stations with
+// DJ chatter text. No audio files.
 export function createAudio() {
   let ctx = null, master = null, engineOsc = null, engineGain = null;
   let radioNodes = null, station = 0, sirenNodes = null;
-  const STATIONS = ['Sol FM — Sunset Drive', 'Radio Cactus — Desert Groove', 'Night Talk 88 — Solmara Nights'];
+  const STATIONS = [
+    'Kota FM 98 — Pop Indonesia',
+    'Senja Dangdut 88 — Koplo Sore',
+    'Suara Jakarta 101 — Obrolan & Keroncong',
+  ];
+  // Indonesian DJ chatter, rotated on the HUD while a station plays.
+  const DJ_LINES = [
+    [
+      'Selamat sore, Jakarta! Macet di Sudirman, tapi lagu tetap jalan.',
+      'Dari Monas sampai Ancol — ini Kota FM, teman sore kamu.',
+      'Buat yang lagi di angkot: sabar, bentar lagi sampai.',
+    ],
+    [
+      'Goyang dulu, Jakarta! Dangdut koplo menemani macet sore.',
+      'Request lagu? Kirim salam buat yang lagi nunggu di halte.',
+      'Sore-sore begini enaknya dengerin koplo sambil makan gorengan.',
+    ],
+    [
+      'Suara Jakarta — obrolan sore dari warung kopi sampai Monas.',
+      'Keroncong sore hari, buat yang kangen Jakarta tempo dulu.',
+      'Hujan reda, jalanan basah, Jakarta tetap bernyanyi.',
+    ],
+  ];
+  let djIdx = 0;
   const audio = {
     stationName: () => STATIONS[station],
+    djLine() {
+      const lines = DJ_LINES[station];
+      const line = lines[djIdx % lines.length];
+      djIdx += 1;
+      return '🎙 ' + line;
+    },
     ensure() {
       if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
       try {
@@ -88,15 +118,16 @@ export function createAudio() {
       if (!ctx) return;
       audio.stopRadio();
       // A tiny step sequencer: bass + hats, different roots per station.
+      // Station 2 (dangdut) gets a bouncier off-beat pattern.
       const roots = [110, 98, 82.4];
       const root = roots[station];
-      const tempo = [112, 96, 78][station];
+      const tempo = [112, 126, 78][station];
       const stepDur = 60 / tempo / 2;
       let step = 0;
       const timer = setInterval(() => {
         if (!ctx) { clearInterval(timer); return; }
         const t = ctx.currentTime;
-        const bassNotes = [0, 0, 7, 0, 5, 0, 7, 10];
+        const bassNotes = station === 1 ? [0, 0, 7, 5, 0, 7, 10, 7] : [0, 0, 7, 0, 5, 0, 7, 10];
         const n = bassNotes[step % 8];
         if (step % 2 === 0) {
           const o = ctx.createOscillator(), g = ctx.createGain();

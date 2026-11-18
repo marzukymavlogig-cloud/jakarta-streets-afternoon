@@ -1,6 +1,6 @@
-// player.js — Mara Voss on foot, plus the pedestrians of Solmara.
-// Third-person walker with a simple built-from-boxes character, punching,
-// a pistol pickup, and peds who stroll the sidewalks and flee from trouble.
+// player.js — Mara on foot in Jakarta, plus the pedestrians of the city:
+// office workers, warung visitors and angkot passengers who stroll the
+// sidewalks and flee from trouble.
 import * as THREE from 'three';
 import { mulberry32, rand, pick, clamp, angleLerp, dist2D } from './util.js';
 import { CITY } from './city.js';
@@ -34,6 +34,7 @@ export function buildPersonMesh(shirt, skin, scale = 1) {
 }
 
 export function createPlayer(scene, x, z) {
+  // Mara: red jacket, Jakarta afternoon. Her brother runs Bengkel Mara.
   const parts = buildPersonMesh(0xd84a4a, 0xc98d64, 1.05);
   parts.group.position.set(x, 0, z);
   scene.add(parts.group);
@@ -41,7 +42,7 @@ export function createPlayer(scene, x, z) {
     parts, mesh: parts.group,
     pos: parts.group.position,
     heading: 0, speed: 0, health: 100,
-    cash: 250, inCar: null, weapon: 'fists', ammo: 0,
+    cash: 250000, inCar: null, weapon: 'fists', ammo: 0, // Rp250.000 from the start
     punchCd: 0, hurtCd: 0, walkPhase: 0,
   };
 }

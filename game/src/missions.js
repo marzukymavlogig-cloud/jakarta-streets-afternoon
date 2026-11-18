@@ -1,91 +1,93 @@
-// missions.js — the story of Mara Voss, a courier who came home to Solmara
-// to save her brother's garage, plus repeatable taxi and delivery gigs and
-// a car dealership. All names, characters and jobs are original.
+// missions.js — the story of Mara, who came home to Jakarta to save her
+// brother's bengkel (auto repair shop), plus repeatable taxi and delivery
+// gigs and a car dealership. All names, characters and jobs are original.
+// EASY BY DESIGN (v2): forgiving timers, big markers, low police pressure
+// during story jobs, generous checkpoints.
 import * as THREE from 'three';
-import { clamp, dist2D } from './util.js';
+import { clamp, dist2D, formatRp } from './util.js';
 import { CITY } from './city.js';
 import { buildPersonMesh } from './player.js';
 import { buildCarMesh } from './vehicles.js';
 import { addWanted } from './police.js';
 
 export const SPOTS = {
-  garage: { x: -150, z: -150, label: 'Voss Garage' },
-  diner: { x: 96, z: -110, label: 'Desert Rose Diner' },
-  docks: { x: CITY.half + 42, z: 90, label: 'Solmara Docks' },
-  dealer: { x: -64, z: 160, label: 'Sunset Motors' },
-  stadium: { x: -CITY.half + 60, z: CITY.half - 60, label: 'Sol Bowl Stadium' },
-  plaza: { x: 20, z: 20, label: 'Sol Plaza' },
-  beach: { x: CITY.half + 46, z: -140, label: 'East Beach' },
-  motel: { x: 170, z: 150, label: 'Cactus Motel' },
+  garage: { x: -150, z: -150, label: 'Bengkel Mara' },
+  diner: { x: 96, z: -110, label: 'Warung Kopi Senja' },
+  docks: { x: CITY.half + 42, z: 90, label: 'Tanjung Priok' },
+  dealer: { x: -64, z: 160, label: 'Mobil Bekas Mangga Dua' },
+  stadium: { x: -CITY.half + 60, z: CITY.half - 60, label: 'Gelora Bung Karno' },
+  plaza: { x: 20, z: 20, label: 'Monas' },
+  beach: { x: CITY.half + 46, z: -140, label: 'Pantai Ancol' },
+  motel: { x: 170, z: 150, label: 'Hotel Melati' },
 };
 
 const STORY = [
   {
-    id: 'homecoming', title: '1 — Homecoming',
-    brief: 'Mara is back in Solmara. Get to Voss Garage and see what is left of it.',
-    steps: [{ text: 'Go to Voss Garage', at: 'garage', radius: 10 }],
-    reward: 100,
+    id: 'homecoming', title: '1 — Pulang Kampung',
+    brief: 'Mara pulang ke Jakarta. Bengkel kakaknya nyaris tutup — datang ke Bengkel Mara dan lihat apa yang tersisa.',
+    steps: [{ text: 'Pergi ke Bengkel Mara', at: 'garage', radius: 16 }],
+    reward: 100000,
   },
   {
-    id: 'firstfare', title: '2 — First Fare',
-    brief: 'The garage needs cash. Pick up a fare at the Desert Rose Diner and drive them to the Sol Bowl — fast, they are late for the game.',
+    id: 'firstfare', title: '2 — Penumpang Pertama',
+    brief: 'Bengkel butuh uang. Jemput penumpang di Warung Kopi Senja dan antar ke Gelora Bung Karno — santai saja, waktunya longgar.',
     steps: [
-      { text: 'Pick up the fare at the Diner', at: 'diner', radius: 9, onArrive: 'pickup' },
-      { text: 'Drive the fare to the Sol Bowl', at: 'stadium', radius: 10, timer: 90, onArrive: 'dropoff' },
+      { text: 'Jemput penumpang di Warung Kopi Senja', at: 'diner', radius: 14, onArrive: 'pickup' },
+      { text: 'Antar penumpang ke Gelora Bung Karno', at: 'stadium', radius: 15, timer: 240, onArrive: 'dropoff' },
     ],
-    reward: 180,
+    reward: 180000,
   },
   {
-    id: 'package', title: '3 — The Package',
-    brief: 'A crate at the docks, no questions asked. Grab it — the port police will not like it — and bring it to the garage.',
+    id: 'package', title: '3 — Paket dari Priok',
+    brief: 'Satu peti di Tanjung Priok, jangan banyak tanya. Ambil, lalu bawa pulang ke bengkel. Polisi pelabuhan mungkin cerewet — tapi santai, mereka lambat sore ini.',
     steps: [
-      { text: 'Collect the crate at the Docks', at: 'docks', radius: 9, onArrive: 'hot' },
-      { text: 'Deliver the crate to Voss Garage — lose the heat', at: 'garage', radius: 10, timer: 110, onArrive: 'deliver' },
+      { text: 'Ambil peti di Tanjung Priok', at: 'docks', radius: 14, onArrive: 'hot' },
+      { text: 'Bawa peti ke Bengkel Mara', at: 'garage', radius: 15, timer: 300, onArrive: 'deliver' },
     ],
-    reward: 350,
+    reward: 350000,
   },
   {
-    id: 'heist', title: '4 — Dustline Heist',
-    brief: 'A gold Comet sits unguarded at Sunset Motors. Take it. The whole PD will be on you — get it to the garage.',
+    id: 'heist', title: '4 — Comet Emas',
+    brief: 'Sebuah Comet emas terparkir tanpa penjaga di Mobil Bekas Mangga Dua. Ambil. Polisi akan mengejar — tapi sore ini mereka cuma berdua, dan kamu lebih cepat.',
     steps: [
-      { text: 'Steal the gold Comet at Sunset Motors', at: 'dealer', radius: 20, onArrive: 'steal' },
-      { text: 'Bring the Comet to Voss Garage', at: 'garage', radius: 10, onArrive: 'deliver' },
+      { text: 'Ambil Comet emas di Mangga Dua', at: 'dealer', radius: 24, onArrive: 'steal' },
+      { text: 'Bawa Comet ke Bengkel Mara', at: 'garage', radius: 15, onArrive: 'deliver' },
     ],
-    reward: 600,
+    reward: 600000,
   },
   {
-    id: 'sunsetrun', title: '5 — Sunset Run',
-    brief: 'One race across Solmara at dusk, five checkpoints, no shortcuts through the river. Win it and the garage is saved.',
+    id: 'sunsetrun', title: '5 — Balapan Senja',
+    brief: 'Satu balapan keliling Jakarta di sore hari, lima checkpoint, santai tapi pasti. Menang dan bengkel selamat.',
     steps: [
-      { text: 'Checkpoint 1 — Sol Plaza', at: 'plaza', radius: 11 },
-      { text: 'Checkpoint 2 — Cactus Motel', at: 'motel', radius: 11 },
-      { text: 'Checkpoint 3 — East Beach', at: 'beach', radius: 11 },
-      { text: 'Checkpoint 4 — Desert Rose Diner', at: 'diner', radius: 11 },
-      { text: 'Checkpoint 5 — Sol Bowl Stadium', at: 'stadium', radius: 11, timer: 150 },
+      { text: 'Checkpoint 1 — Monas', at: 'plaza', radius: 16 },
+      { text: 'Checkpoint 2 — Hotel Melati', at: 'motel', radius: 16 },
+      { text: 'Checkpoint 3 — Pantai Ancol', at: 'beach', radius: 16 },
+      { text: 'Checkpoint 4 — Warung Kopi Senja', at: 'diner', radius: 16 },
+      { text: 'Checkpoint 5 — Gelora Bung Karno', at: 'stadium', radius: 16, timer: 300 },
     ],
-    reward: 1000,
+    reward: 1000000,
   },
 ];
 
 export const SHOP_CARS = [
-  { name: 'Dune Runner', color: 0xe87a2e, kind: 'pickup', price: 800 },
-  { name: 'Falcon GT', color: 0x2e6fc2, kind: 'sedan', price: 2200 },
-  { name: 'Comet S', color: 0xc23b2e, kind: 'sedan', price: 5000 },
+  { name: 'Dune Runner', color: 0xe87a2e, kind: 'pickup', price: 800000 },
+  { name: 'Falcon GT', color: 0x2e6fc2, kind: 'sedan', price: 2200000 },
+  { name: 'Comet S', color: 0xc23b2e, kind: 'sedan', price: 5000000 },
 ];
 
 export function createMarker(scene) {
   const g = new THREE.Group();
   const beam = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.6, 2.6, 80, 12, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0xffe14d, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }),
+    new THREE.CylinderGeometry(3.4, 3.4, 90, 12, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffe14d, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }),
   );
-  beam.position.y = 40; g.add(beam);
+  beam.position.y = 45; g.add(beam);
   const ring = new THREE.Mesh(
-    new THREE.RingGeometry(2.6, 3.6, 24),
-    new THREE.MeshBasicMaterial({ color: 0xffc93b, transparent: true, opacity: 0.85, side: THREE.DoubleSide }),
+    new THREE.RingGeometry(3.4, 4.8, 24),
+    new THREE.MeshBasicMaterial({ color: 0xffc93b, transparent: true, opacity: 0.9, side: THREE.DoubleSide }),
   );
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.15; g.add(ring);
-  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(1.5),
+  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(1.8),
     new THREE.MeshBasicMaterial({ color: 0xffe14d }));
   gem.position.y = 7; g.add(gem);
   g.visible = false;
@@ -113,6 +115,7 @@ export function startStoryMission(G, index) {
   const def = STORY[index];
   m.active = { def, kind: 'story' };
   m.stepIndex = 0; m.timer = 0;
+  G.police.storyMode = true; // easy: police go gentle during story jobs
   G.hud.setObjective(`${def.title}: ${def.steps[0].text}`);
   G.hud.toast(def.title, def.brief);
   G.audio.blip(660);
@@ -133,10 +136,11 @@ function finishMission(G, reward, text) {
   const m = G.missions;
   const wasStory = m.active && m.active.kind === 'story';
   G.player.cash += reward;
-  G.hud.toast('JOB DONE', `${text}  +$${reward}`);
-  G.hud.setObjective('Free roam — find a gig marker, or visit Sunset Motors.');
+  G.hud.toast('JOB DONE', `${text}  +${formatRp(reward)}`);
+  G.hud.setObjective('Jalan-jalan — cari marker gig, atau mampir ke Mangga Dua.');
   G.audio.fanfare();
   m.marker.group.visible = false;
+  G.police.storyMode = false;
   if (m.passenger) { G.scene.remove(m.passenger.mesh); m.passenger = null; }
   if (m.active && m.active.kind === 'gig') m.gigCd = 6;
   m.active = null; m.timer = 0;
@@ -144,11 +148,11 @@ function finishMission(G, reward, text) {
     m.storyIndex += 1;
     if (m.storyIndex >= STORY.length) {
       m.storyDone = true;
-      G.hud.toast('STORY COMPLETE', 'Mara saved the garage. Solmara is yours — free roam, gigs and the dealership remain open.');
+      G.hud.toast('CERITA SELESAI', 'Mara menyelamatkan bengkel. Jakarta milikmu — gig, dealer, dan kota tetap terbuka.');
       G.mode = G.mode; // stay in play
       G.save.save(G);
     } else {
-      G.hud.setObjective(`Next job ready — press M to start: ${STORY[m.storyIndex].title}`);
+      G.hud.setObjective(`Job berikutnya siap — tekan M untuk mulai: ${STORY[m.storyIndex].title}`);
     }
   }
   G.save.save(G);
@@ -163,7 +167,7 @@ export function startNextStory(G) {
   if (m.active && m.active.kind === 'gig') {
     if (m.passenger) { G.scene.remove(m.passenger.mesh); m.passenger = null; }
     m.active = null; m.gigCd = 45;
-    G.hud.toast('GIG DROPPED', 'The story comes first.');
+    G.hud.toast('GIG DIBATALKAN', 'Cerita dulu, gig belakangan.');
   }
   startStoryMission(G, m.storyIndex);
   return true;
@@ -180,16 +184,16 @@ function spawnGig(G) {
   m.active = {
     kind: 'gig',
     def: {
-      title: taxi ? 'Taxi gig' : 'Delivery gig',
+      title: taxi ? 'Gig taksi' : 'Gig antar paket',
       steps: [
-        { text: taxi ? `Pick up the passenger at ${SPOTS[a].label}` : `Collect the parcel at ${SPOTS[a].label}`, at: a, radius: 9 },
-        { text: taxi ? `Drop them at ${SPOTS[b].label}` : `Deliver to ${SPOTS[b].label}`, at: b, radius: 10, timer: 100 },
+        { text: taxi ? `Jemput penumpang di ${SPOTS[a].label}` : `Ambil paket di ${SPOTS[a].label}`, at: a, radius: 14 },
+        { text: taxi ? `Antar ke ${SPOTS[b].label}` : `Antar ke ${SPOTS[b].label}`, at: b, radius: 15, timer: 240 },
       ],
     },
   };
   m.stepIndex = 0;
   G.hud.setObjective(`Gig: ${m.active.def.steps[0].text}`);
-  G.hud.toast('NEW GIG', taxi ? 'A passenger needs a ride. Yellow marker.' : 'A parcel needs a courier. Yellow marker.');
+  G.hud.toast('GIG BARU', taxi ? 'Ada penumpang butuh tumpangan. Ikuti marker kuning.' : 'Ada paket butuh kurir. Ikuti marker kuning.');
   placeMarkerForStep(G);
 }
 
@@ -201,11 +205,12 @@ function onStepArrive(G, step) {
     parts.group.position.set(G.player.pos.x + 2, 0, G.player.pos.z + 2);
     G.scene.add(parts.group);
     m.passenger = { mesh: parts.group, parts };
-    G.hud.toast('PASSENGER IN', 'They are in a hurry — drive smooth, drive fast.');
+    G.hud.toast('PENUMPANG NAIK', 'Mereka buru-buru — tapi santai, waktunya longgar.');
   }
   if (kind === 'hot') {
-    addWanted(G.police, 40, G.now);
-    G.hud.toast('HEAT!', 'Port security called it in. The PD is coming.');
+    // Easy: a little heat only, and story mode keeps the pursuit gentle.
+    addWanted(G.police, 15, G.now);
+    G.hud.toast('AWAS!', 'Satpam pelabuhan melapor. Polisi datang — tapi cuma sedikit.');
     G.audio.siren();
   }
   if (kind === 'steal') {
@@ -214,10 +219,10 @@ function onStepArrive(G, step) {
     group.position.set(SPOTS.dealer.x + 14, 0, SPOTS.dealer.z + 6);
     group.rotation.y = Math.PI / 2;
     G.scene.add(group);
-    const car = { mesh: group, kind: 'sedan', speed: 0, heading: Math.PI / 2, driver: false, stolen: true, hp: 100, name: 'Comet (stolen)', gold: true };
+    const car = { mesh: group, kind: 'sedan', speed: 0, heading: Math.PI / 2, driver: false, stolen: true, hp: 100, name: 'Comet (curian)', gold: true };
     G.traffic.push(car);
     m.heistCar = car;
-    G.hud.toast('THE COMET', 'Get in the gold Comet — then run.');
+    G.hud.toast('COMET EMAS', 'Naik ke Comet emas — lalu kabur.');
     m.marker.group.visible = false;
     return 'wait-car';
   }
@@ -253,9 +258,10 @@ export function updateMissions(G, dt) {
     m.timer -= dt;
     G.hud.setTimer(Math.max(0, m.timer));
     if (m.timer <= 0) {
-      G.hud.toast('TOO LATE', 'The job timed out. Another will come.');
+      G.hud.toast('KEHABISAN WAKTU', 'Job-nya lewat. Tenang, job lain akan datang — tekan M lagi.');
       G.hud.setTimer(0);
       m.active = null; m.marker.group.visible = false;
+      G.police.storyMode = false;
       if (m.passenger) { G.scene.remove(m.passenger.mesh); m.passenger = null; }
       m.gigCd = 8;
       return;
@@ -264,7 +270,8 @@ export function updateMissions(G, dt) {
   // Heist special: wait until the player is driving the gold car.
   if (m.heistCar && m.stepIndex === 0 && step.onArrive === 'steal') {
     if (p.inCar === m.heistCar) {
-      addWanted(G.police, 60, G.now);
+      // Easy: only 1 star of heat for the heist getaway.
+      addWanted(G.police, 20, G.now);
       G.audio.siren();
       m.stepIndex = 1; placeMarkerForStep(G);
       G.hud.setObjective(`${m.active.def.title}: ${m.active.def.steps[1].text}`);
@@ -280,8 +287,8 @@ export function updateMissions(G, dt) {
     if (last) {
       const isStory = m.active.kind === 'story';
       const reward = isStory ? m.active.def.reward
-        : Math.round(60 + d * 0 + 40 + Math.random() * 80);
-      const label = isStory ? m.active.def.title : (m.active.def.title + ' paid');
+        : Math.round(60000 + Math.random() * 80000);
+      const label = isStory ? m.active.def.title : (m.active.def.title + ' dibayar');
       finishMission(G, reward, label);
     } else {
       m.stepIndex += 1;
@@ -295,9 +302,9 @@ export function updateMissions(G, dt) {
 /** Dealership: buy a car with cash; it waits at the garage. */
 export function buyShopCar(G, index) {
   const car = SHOP_CARS[index];
-  if (!car) return 'No such car.';
-  if (G.player.cash < car.price) return `Need $${car.price} — you have $${G.player.cash}. Do gigs first.`;
-  if (G.missions.owned.includes(car.name)) return 'You already own that one — it is parked at the garage.';
+  if (!car) return 'Tidak ada mobil itu.';
+  if (G.player.cash < car.price) return `Butuh ${formatRp(car.price)} — kamu punya ${formatRp(G.player.cash)}. Kerjakan gig dulu.`;
+  if (G.missions.owned.includes(car.name)) return 'Sudah punya — mobilnya parkir di bengkel.';
   G.player.cash -= car.price;
   G.missions.owned.push(car.name);
   const { group } = buildCarMesh(car.color, car.kind);
@@ -306,7 +313,7 @@ export function buyShopCar(G, index) {
   group.rotation.y = Math.PI / 2;
   G.scene.add(group);
   G.traffic.push({ mesh: group, kind: car.kind, speed: 0, heading: Math.PI / 2, driver: false, stolen: false, hp: 100, name: car.name, owned: true });
-  G.hud.toast('NEW CAR', `${car.name} is parked at Voss Garage.`);
+  G.hud.toast('MOBIL BARU', `${car.name} parkir di Bengkel Mara.`);
   G.save.save(G);
-  return `${car.name} bought for $${car.price}. Parked at the garage.`;
+  return `${car.name} dibeli ${formatRp(car.price)}. Parkir di bengkel.`;
 }

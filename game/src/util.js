@@ -1,4 +1,5 @@
-// Shared helpers for SOLMARA: seeded random, math, and tiny vector utilities.
+// Shared helpers for JAKARTA — Streets of the Afternoon: seeded random,
+// math, rupiah formatting, and tiny vector utilities.
 // Every module in this game is original code written for this entry.
 import * as THREE from 'three';
 
@@ -26,6 +27,10 @@ export function angleDiff(a, b) {
 export function dist2D(ax, az, bx, bz) {
   const dx = ax - bx, dz = az - bz;
   return Math.sqrt(dx * dx + dz * dz);
+}
+/** Rupiah: 250000 -> "Rp250.000". Cash is stored in whole rupiah. */
+export function formatRp(n) {
+  return 'Rp' + Math.floor(n).toLocaleString('id-ID');
 }
 /** A canvas texture with a lit-window facade, tinted per building by instance color. */
 export function makeFacadeTexture(rng) {

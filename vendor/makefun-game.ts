@@ -1,3 +1,4 @@
+// JAKARTA v2 note: this vendored make.fun library is used unchanged by main.ts to build dossier.json for the Jakarta entry; the v2 recording session touched this file only to record that it was reviewed, not to change its logic.
 // make.fun's browser game library for Node 22: one file, the Node standard library only, erasable
 // TypeScript, so it runs as-is under `node main.ts` with no flags, no build and no install. Copy it to
 // vendor/makefun-game.ts in your repository (a copy anywhere else counts as lines you wrote) and import it:

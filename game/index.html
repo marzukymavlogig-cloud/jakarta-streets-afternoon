@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="id">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SOLMARA — Streets of the Sun</title>
+<title>JAKARTA — Streets of the Afternoon</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #10141c;
     font-family: 'Segoe UI', system-ui, sans-serif; color: #fff; }
@@ -18,6 +18,8 @@
   #hud-stars.hot { color: #ff5340; animation: pulse 0.7s infinite alternate; }
   @keyframes pulse { from { opacity: 1; } to { opacity: 0.45; } }
   #hud-clock, #hud-weather, #hud-radio { font-size: 15px; font-weight: 600; opacity: 0.95; }
+  #hud-dj { font-size: 13px; font-weight: 500; font-style: italic; opacity: 0.85;
+    max-width: 320px; margin-top: 2px; }
   #hud-bottom-left { position: absolute; left: 16px; bottom: 16px; }
   #minimap { width: 168px; height: 168px; border: 3px solid rgba(255,255,255,0.65);
     border-radius: 50%; background: #10141c; box-shadow: 0 4px 18px rgba(0,0,0,0.6); }
@@ -70,16 +72,17 @@
 </script>
 </head>
 <body>
-<canvas id="game" aria-label="SOLMARA: an open-world crime game in a sun-baked river city"></canvas>
+<canvas id="game" aria-label="JAKARTA: an open-world crime game in golden-hour Jakarta, Indonesia"></canvas>
 
 <div id="hud" class="hidden">
-  <div id="hud-objective">Press M to start the next story job.</div>
+  <div id="hud-objective">Tekan M untuk mulai job cerita berikutnya.</div>
   <div id="hud-top-right">
-    <div id="hud-cash">$250</div>
+    <div id="hud-cash">Rp250.000</div>
     <div id="hud-stars">☆☆☆☆☆</div>
-    <div id="hud-clock">10:30</div>
-    <div id="hud-weather">☀ Clear</div>
-    <div id="hud-radio">♪ Sol FM</div>
+    <div id="hud-clock">16:30</div>
+    <div id="hud-weather">☀ Cerah</div>
+    <div id="hud-radio">♪ Kota FM 98</div>
+    <div id="hud-dj"></div>
   </div>
   <div id="hud-bottom-left"><canvas id="minimap" width="168" height="168"></canvas></div>
   <div id="hud-bottom-right">
@@ -88,51 +91,53 @@
     <div>HEALTH <span id="hud-health">100</span></div>
     <div id="hud-timer"></div>
   </div>
-  <div id="hud-hint">WASD move / drive &nbsp;·&nbsp; E enter car &nbsp;·&nbsp; F punch / shoot &nbsp;·&nbsp; M next job &nbsp;·&nbsp; R radio &nbsp;·&nbsp; Space handbrake &nbsp;·&nbsp; drag mouse to look &nbsp;·&nbsp; Esc pause</div>
+  <div id="hud-hint">WASD jalan / nyetir &nbsp;·&nbsp; E naik mobil &nbsp;·&nbsp; F pukul / tembak &nbsp;·&nbsp; M job berikutnya &nbsp;·&nbsp; R radio &nbsp;·&nbsp; Spasi rem tangan &nbsp;·&nbsp; drag mouse untuk melihat &nbsp;·&nbsp; Esc jeda</div>
   <div id="toast"><div id="toast-title"></div><div id="toast-text"></div></div>
 </div>
 
 <div id="screen-title" class="screen">
-  <h1>SOLMARA</h1>
-  <h2>STREETS OF THE SUN</h2>
-  <p>Mara Voss came home to save her brother's garage — and found a city that only
-  respects people who take what they want. Drive it, steal it, outrun the Solmara PD,
-  and run five jobs across a sun-baked river city that never sleeps.</p>
-  <p>An original open-world crime game: drive and steal cars, taxi and delivery gigs,
-  a wanted system with police chases and a helicopter, a day–night cycle with rain
-  and fog, three radio stations, a car dealership, and a save that keeps your story.</p>
+  <h1>JAKARTA</h1>
+  <h2>STREETS OF THE AFTERNOON</h2>
+  <p>Mara pulang ke Jakarta untuk menyelamatkan bengkel kakaknya — dan menemukan
+  kota yang hanya menghormati orang yang berani mengambil. Lewati Sudirman,
+  hindari polisi, dan selesaikan lima job di bawah matahari sore, dari Monas
+  sampai Ancol.</p>
+  <p>Game open-world orisinal: nyetir dan bajak mobil, gig taksi dan antar paket,
+  sistem buronan dengan kejar-kejaran polisi dan helikopter, siklus sore hari
+  dengan hujan dan kabut, tiga stasiun radio Indonesia, dealer mobil, dan
+  save yang menjaga ceritamu.</p>
   <div>
     <button class="btn" id="btn-new">NEW GAME</button>
     <button class="btn" id="btn-continue" disabled>CONTINUE</button>
     <button class="btn ghost" id="btn-freeroam">FREE ROAM</button>
   </div>
-  <div class="controls">WASD move / drive &nbsp;·&nbsp; E enter or steal a car &nbsp;·&nbsp; F punch / shoot &nbsp;·&nbsp; M next story job<br>
-  R radio &nbsp;·&nbsp; Space handbrake &nbsp;·&nbsp; C camera &nbsp;·&nbsp; drag mouse to look &nbsp;·&nbsp; Esc pause &amp; save</div>
+  <div class="controls">WASD jalan / nyetir &nbsp;·&nbsp; E naik atau bajak mobil &nbsp;·&nbsp; F pukul / tembak &nbsp;·&nbsp; M job cerita berikutnya<br>
+  R radio &nbsp;·&nbsp; Spasi rem tangan &nbsp;·&nbsp; C kamera &nbsp;·&nbsp; drag mouse untuk melihat &nbsp;·&nbsp; Esc jeda &amp; simpan</div>
 </div>
 
 <div id="screen-pause" class="screen hidden">
-  <h1 style="font-size:52px">PAUSED</h1>
-  <p>Solmara waits for no one — except right now.</p>
+  <h1 style="font-size:52px">JEDA</h1>
+  <p>Jakarta tidak menunggu siapa pun — kecuali sekarang.</p>
   <div>
     <button class="btn" id="btn-resume">RESUME</button>
     <button class="btn" id="btn-save">SAVE GAME</button>
     <button class="btn ghost" id="btn-restart">RESTART STORY</button>
   </div>
-  <div class="controls">Progress also saves automatically after every finished job.</div>
+  <div class="controls">Progress juga tersimpan otomatis setelah setiap job selesai.</div>
 </div>
 
 <div id="screen-dead" class="screen hidden">
-  <h1 id="dead-title" style="font-size:64px">WASTED</h1>
-  <p id="dead-text">Mara went down. The garage is still waiting.</p>
-  <div><button class="btn" id="btn-dead">BACK TO THE GARAGE</button></div>
+  <h1 id="dead-title" style="font-size:64px">TEWAS</h1>
+  <p id="dead-text">Mara tumbang. Bengkel masih menunggu.</p>
+  <div><button class="btn" id="btn-dead">KEMBALI KE BENGKEL</button></div>
 </div>
 
 <div id="screen-shop" class="screen hidden">
-  <h1 style="font-size:44px">SUNSET MOTORS</h1>
-  <p id="shop-cash">Your cash: $250</p>
+  <h1 style="font-size:44px">MOBIL BEKAS MANGGA DUA</h1>
+  <p id="shop-cash">Uang kamu: Rp250.000</p>
   <div id="shop-list"></div>
   <p id="shop-msg"></p>
-  <div><button class="btn" id="btn-shop-close">DONE</button></div>
+  <div><button class="btn" id="btn-shop-close">SELESAI</button></div>
 </div>
 
 <p id="status" role="status" aria-live="polite"></p>
