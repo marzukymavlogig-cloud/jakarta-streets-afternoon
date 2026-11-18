@@ -1,56 +1,61 @@
-// save.js — localStorage saves. Autosave after every job and gig, plus the
-// pause-menu Save button. A save holds cash, health, story progress, the
-// arsenal, Mara's position and the hour; loading restores them and offers
-// Continue on the title screen.
+// save.js — localStorage saves for JAKARTA (key jakarta-save-v1).
+// Autosaves after every finished job; the pause menu saves on demand.
 export const SAVE_KEY = 'jakarta-save-v1';
 
-export function saveGame(G) {
-  try {
-    const P = G.player;
-    const data = {
-      version: 1,
-      cash: Math.round(P.cash),
-      hp: Math.round(P.hp),
-      storyIndex: G.missions.storyIndex,
-      arsenal: P.arsenal,
-      weapon: P.weapon,
-      pos: { x: P.pos.x, z: P.pos.z },
-      hour: G.hour,
-      savedAt: new Date().toISOString(),
-    };
-    window.localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function loadSave() {
-  try {
-    const raw = window.localStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (!data || data.version !== 1) return null;
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-export function hasSave() {
-  return loadSave() !== null;
-}
-
-export function applySave(G, data) {
-  const P = G.player;
-  P.cash = data.cash ?? 250000;
-  P.hp = data.hp ?? 100;
-  P.weapon = data.weapon || 'pistol';
-  if (data.arsenal) P.arsenal = data.arsenal;
-  if (data.pos) {
-    P.pos.set(data.pos.x, 0, data.pos.z);
-    P.mesh.position.copy(P.pos);
-  }
-  if (data.hour) G.hour = data.hour;
-  G.missions.storyIndex = data.storyIndex ?? 0;
+export function makeSave(G) {
+  const save = {
+    saveGame(G) {
+      try {
+        const p = G.player;
+        const data = {
+          v: 1,
+          cash: p.cash,
+          hp: p.hp,
+          storyIndex: G.missions.storyIndex,
+          arsenal: p.arsenal,
+          weapon: p.weapon,
+          pos: [p.pos.x, p.pos.z],
+          hour: G.hour,
+          ownedCars: G.traffic.filter((c) => c.owned).map((c) => c.name),
+          savedAt: Date.now(),
+        };
+        localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+        G.hud.toast('Tersimpan.');
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+    loadGame(G) {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        if (!data || data.v !== 1) return null;
+        const p = G.player;
+        p.cash = data.cash ?? 250000;
+        p.hp = data.hp ?? 100;
+        G.missions.storyIndex = data.storyIndex ?? 0;
+        if (data.arsenal) p.arsenal = data.arsenal;
+        if (data.weapon && p.arsenal[data.weapon]) p.weapon = data.weapon;
+        if (data.pos) {
+          p.pos.set(data.pos[0], 0, data.pos[1]);
+          p.mesh.position.copy(p.pos);
+        }
+        if (data.hour) G.hour = data.hour;
+        return data;
+      } catch (e) {
+        return null;
+      }
+    },
+    hasSave() {
+      try {
+        return !!localStorage.getItem(SAVE_KEY);
+      } catch (e) {
+        return false;
+      }
+    },
+  };
+  G.save = save;
+  return save;
 }

@@ -5,79 +5,124 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>JAKARTA — Streets of the Afternoon</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a1410;
-    font-family: 'Segoe UI', system-ui, sans-serif; color: #fff; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a1410; font-family: Arial, Helvetica, sans-serif; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
-  #hud button { pointer-events: auto; cursor: pointer; }
-  #hud-top-left { position: absolute; top: 14px; left: 16px; }
-  #hud-cash { font-size: 30px; font-weight: 800; color: #7dff9a;
-    text-shadow: 0 2px 6px rgba(0,0,0,.8); }
-  #hud-stars { font-size: 26px; letter-spacing: 4px; color: #ffd700;
-    text-shadow: 0 2px 6px rgba(0,0,0,.8); }
-  #hud-objective { margin-top: 8px; max-width: 420px; font-size: 15px; font-weight: 600;
-    background: rgba(0,0,0,.55); padding: 7px 10px; border-radius: 6px; border-left: 4px solid #ffd700; }
-  #hud-mission-bar { margin-top: 6px; width: 300px; height: 16px; background: rgba(0,0,0,.6);
-    border-radius: 8px; overflow: hidden; position: relative; }
-  #hud-mission-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ffaa22, #ffd700); }
-  #hud-mission-pct { position: absolute; right: 6px; top: 0; font-size: 12px; line-height: 16px; font-weight: 700; }
-  #hud-timer { margin-top: 4px; font-size: 14px; font-weight: 700; color: #ffd700; text-shadow: 0 1px 4px #000; }
-  #hud-top-right { position: absolute; top: 14px; right: 16px; text-align: right; }
-  #hud-minimap { border-radius: 50%; border: 3px solid rgba(255,255,255,.7);
-    box-shadow: 0 2px 10px rgba(0,0,0,.6); background: rgba(20,26,34,.85); }
-  #hud-health-wrap { margin-top: 6px; width: 180px; height: 14px; background: rgba(0,0,0,.6);
-    border-radius: 7px; overflow: hidden; position: relative; margin-left: auto; }
-  #hud-health-fill { height: 100%; width: 100%; background: #37c978; }
-  #hud-health-text { position: absolute; right: 6px; top: 0; font-size: 11px; line-height: 14px; font-weight: 700; }
-  #hud-bottom-left { position: absolute; left: 16px; bottom: 16px; }
-  #hud-radio { font-size: 15px; font-weight: 700; color: #ffe9b0; text-shadow: 0 1px 4px #000; }
-  #hud-dj { font-size: 13px; font-style: italic; color: #ddd; text-shadow: 0 1px 4px #000; max-width: 420px; }
-  #hud-weapon { margin-top: 6px; font-size: 18px; font-weight: 800; color: #fff; text-shadow: 0 1px 4px #000; }
-  #hud-slots { margin-top: 4px; display: flex; gap: 6px; }
-  #hud-slots .slot { font-size: 12px; font-weight: 700; padding: 4px 8px; border-radius: 4px;
-    background: rgba(0,0,0,.55); color: #777; border: 1px solid #555; }
-  #hud-slots .slot.owned { color: #ddd; border-color: #999; }
-  #hud-slots .slot.active { color: #111; background: #ffd700; border-color: #ffd700; }
-  #hud-bottom-right { position: absolute; right: 16px; bottom: 16px; text-align: right; }
-  #hud-speed { font-size: 40px; font-weight: 800; line-height: 1; text-shadow: 0 2px 8px rgba(0,0,0,.9); }
-  #hud-speed-unit { font-size: 12px; color: #ddd; }
-  #hud-clock { font-size: 20px; font-weight: 700; text-shadow: 0 1px 4px #000; }
-  #hud-weather { font-size: 14px; text-shadow: 0 1px 4px #000; }
-  #hud-dialogue { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%);
-    display: flex; gap: 10px; align-items: center; max-width: 640px;
-    background: rgba(0,0,0,.72); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,215,0,.5); }
-  #hud-portrait { width: 44px; height: 44px; border-radius: 50%; background: #ffd700; color: #111;
-    font-size: 24px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: none; }
-  #hud-dialogue-speaker { font-size: 12px; font-weight: 800; color: #ffd700; letter-spacing: 1px; }
+  .hud { position: fixed; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); pointer-events: none; z-index: 5; }
+  #hud-top-left { top: 14px; left: 16px; font-size: 20px; font-weight: bold; }
+  #hud-cash { font-size: 26px; color: #7dff9a; }
+  #hud-stars { font-size: 26px; letter-spacing: 2px; margin-top: 2px; }
+  #hud-health { margin-top: 6px; width: 190px; height: 12px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.5); border-radius: 6px; overflow: hidden; }
+  #hud-health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #37c24a, #7dff9a); }
+  #hud-health-text { font-size: 13px; }
+  #hud-top-right { top: 14px; right: 16px; text-align: right; font-size: 15px; }
+  #hud-clock { font-size: 26px; font-weight: bold; }
+  #hud-radio { margin-top: 4px; color: #ffd23c; }
+  #hud-dj { font-size: 12px; color: #ddd; font-style: italic; max-width: 320px; }
+  #hud-objective { top: 14px; left: 50%; transform: translateX(-50%); text-align: center; width: 520px; }
+  #hud-objective-text { font-size: 17px; font-weight: bold; background: rgba(0,0,0,.5); padding: 6px 12px; border-radius: 8px; display: inline-block; }
+  #hud-mission-bar { display: none; margin: 6px auto 0; width: 380px; }
+  #hud-mission-track { height: 10px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.5); border-radius: 5px; overflow: hidden; }
+  #hud-mission-fill { height: 100%; width: 0%; background: #ffc21a; }
+  #hud-mission-meta { font-size: 13px; margin-top: 3px; }
+  #hud-weapon { bottom: 150px; right: 18px; font-size: 19px; font-weight: bold; text-align: right; }
+  #hud-slots { bottom: 108px; right: 18px; display: flex; gap: 6px; }
+  #hud-slots .slot { width: 64px; padding: 5px 0; text-align: center; font-size: 12px; font-weight: bold; background: rgba(0,0,0,.55); border: 2px solid rgba(255,255,255,.35); border-radius: 6px; }
+  #hud-slots .slot.active { border-color: #ffc21a; color: #ffc21a; }
+  #hud-speed { bottom: 16px; right: 18px; font-size: 46px; font-weight: bold; text-align: right; }
+  #hud-speed small { font-size: 16px; }
+  #hud-minimap { bottom: 16px; left: 16px; }
+  #minimap { width: 180px; height: 180px; border-radius: 50%; background: rgba(0,0,0,.4); }
+  #hud-toast { top: 110px; left: 50%; transform: translateX(-50%); font-size: 18px; font-weight: bold; background: rgba(0,0,0,.65); padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .3s; white-space: nowrap; }
+  #hud-dialogue { bottom: 210px; left: 50%; transform: translateX(-50%); width: 620px; display: none; align-items: center; gap: 12px; background: rgba(0,0,0,.72); border-radius: 10px; padding: 10px 14px; }
+  #hud-dialogue-portrait { width: 44px; height: 44px; border-radius: 50%; background: #c23b2e; color: #fff; font-size: 24px; font-weight: bold; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  #hud-dialogue-speaker { font-size: 13px; color: #ffc21a; font-weight: bold; }
   #hud-dialogue-text { font-size: 16px; }
-  #hud-toasts { position: absolute; left: 50%; top: 90px; transform: translateX(-50%);
-    display: flex; flex-direction: column; gap: 6px; align-items: center; }
-  .toast { background: rgba(0,0,0,.75); padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; }
-  .toast.good { border: 1px solid #37c978; color: #a9f5c6; }
-  .toast.warn { border: 1px solid #ff4444; color: #ffb3b3; }
-  #hud-hint { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%);
-    font-size: 11px; color: rgba(255,255,255,.65); text-shadow: 0 1px 3px #000; white-space: nowrap; }
-  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; background: rgba(10,8,6,.55); pointer-events: auto; text-align: center; padding: 20px; }
-  .screen h1 { font-size: 64px; margin: 0; letter-spacing: 6px; color: #ffd700;
-    text-shadow: 0 4px 24px rgba(255,150,40,.6); }
-  .screen h2 { font-size: 22px; margin: 4px 0 18px; font-weight: 400; letter-spacing: 3px; color: #ffe9b0; }
-  .screen p { max-width: 560px; font-size: 16px; line-height: 1.5; }
-  .screen .controls { font-size: 13px; color: #ccc; }
-  .screen .fine { margin-top: 22px; font-size: 12px; color: #999; }
-  .screen button { margin: 6px; padding: 12px 28px; font-size: 17px; font-weight: 800;
-    background: #ffd700; color: #111; border: none; border-radius: 8px; }
-  .screen button:hover { background: #ffe066; }
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; z-index: 10; color: #fff; text-align: center; }
+  #screen-title { display: flex; background: rgba(20, 12, 6, 0.55); }
+  #screen-pause, #screen-busted, #screen-wasted { background: rgba(0,0,0,0.6); }
+  .screen h1 { font-size: 54px; margin: 0; letter-spacing: 3px; text-shadow: 0 3px 12px rgba(0,0,0,.9); }
+  .screen h2 { font-size: 22px; color: #ffc21a; margin: 8px 0 20px; font-weight: normal; }
+  .screen p { max-width: 560px; font-size: 15px; line-height: 1.6; color: #eee; }
+  .screen button { pointer-events: auto; font-size: 18px; font-weight: bold; padding: 12px 28px; margin: 6px; border: none; border-radius: 8px; background: #ffc21a; color: #222; cursor: pointer; }
+  .screen button:hover { background: #ffd94a; }
+  .screen button.secondary { background: rgba(255,255,255,.2); color: #fff; }
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>
+</head>
+<body>
+<canvas id="game" aria-label="JAKARTA — Streets of the Afternoon: open-world crime game in Jakarta"></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+
+<div class="hud" id="hud-top-left">
+  <div id="hud-cash">Rp250.000</div>
+  <div id="hud-stars">☆☆☆☆☆</div>
+  <div id="hud-health"><div id="hud-health-fill"></div></div>
+  <div id="hud-health-text">100</div>
+</div>
+<div class="hud" id="hud-top-right">
+  <div id="hud-clock">17:00</div>
+  <div id="hud-weather">☀ Cerah</div>
+  <div id="hud-radio">♪ Kota FM 98 — Pop Indonesia</div>
+  <div id="hud-dj"></div>
+</div>
+<div class="hud" id="hud-objective">
+  <span id="hud-objective-text">Tekan M untuk misi: Pulang Kampung</span>
+  <div id="hud-mission-bar">
+    <div id="hud-mission-track"><div id="hud-mission-fill"></div></div>
+    <div id="hud-mission-meta"><span id="hud-mission-pct">0%</span> · <span id="hud-mission-time">4:00</span></div>
+  </div>
+</div>
+<div class="hud" id="hud-weapon">PISTOL 12 / 24</div>
+<div class="hud" id="hud-slots">
+  <div class="slot owned active">1 PISTOL</div>
+  <div class="slot">2 SMG</div>
+  <div class="slot">3 SHOTGUN</div>
+  <div class="slot">4 SENAPAN</div>
+</div>
+<div class="hud" id="hud-speed">0 <small>km/h</small></div>
+<div class="hud" id="hud-minimap"><canvas id="minimap" width="180" height="180"></canvas></div>
+<div class="hud" id="hud-toast"></div>
+<div class="hud" id="hud-dialogue">
+  <div id="hud-dialogue-portrait">M</div>
+  <div><div id="hud-dialogue-speaker">Mara</div><div id="hud-dialogue-text"></div></div>
+</div>
+
+<div class="screen" id="screen-title">
+  <h1>JAKARTA</h1>
+  <h2>Streets of the Afternoon</h2>
+  <p>Mara Voss pulang ke Jakarta untuk menyelamatkan bengkel Abangnya.
+  Jelajahi kota saat golden hour — Monas, Wisma 46, Bundaran HI, kampung,
+  dan Kali Ciliwung — dengan berjalan kaki atau menyetir, kerjakan 5 misi
+  cerita, dan hindari polisi.</p>
+  <p>WASD jalan / nyetir · Shift lari · E masuk mobil / beli · F tembak / tinju ·
+  R isi ulang · 1–4 senjata · M misi · Q radio · Esc jeda</p>
+  <div>
+    <button id="btn-new">Mulai Baru</button>
+    <button id="btn-continue" class="secondary">Lanjutkan</button>
+  </div>
+</div>
+<div class="screen" id="screen-pause">
+  <h1>JEDA</h1>
+  <h2>Istirahat dulu, Jakarta menunggu.</h2>
+  <div>
+    <button id="btn-save">Simpan</button>
+    <button id="btn-resume">Lanjutkan</button>
+  </div>
+</div>
+<div class="screen" id="screen-busted">
+  <h1>TERTANGKAP!</h1>
+  <h2>Polisi menangkapmu. Denda Rp150.000.</h2>
+  <div><button id="btn-retry-busted">Coba Lagi</button></div>
+</div>
+<div class="screen" id="screen-wasted">
+  <h1>PINGSAN!</h1>
+  <h2>Kamu pingsan. Biaya rumah sakit Rp100.000.</h2>
+  <div><button id="btn-retry-wasted">Bangun Lagi</button></div>
+</div>
+
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.min.js" } }
 </script>
-</head>
-<body>
-<canvas id="game" aria-label="JAKARTA Streets of the Afternoon: open-world crime game in Jakarta"></canvas>
-<div id="hud"></div>
-<p id="status" role="status" aria-live="polite"></p>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
