@@ -37,7 +37,7 @@ camera.position.set(80, 40, 140);
 const city = createCity(scene, seed);
 const player = createPlayer(scene, 60, 120);
 const traffic = createTraffic(scene, seed, 16);
-const peds = createPedestrians(scene, seed, 26);
+const peds = createPedestrians(scene, seed, 44); // 26 roam the city, 18 crowd Monas (v3)
 const police = createPolice(scene);
 const missions = createMissions(scene);
 const audio = createAudio();
@@ -286,7 +286,7 @@ function updateCamera(dt) {
   const inCar = player.inCar;
   const speed = inCar ? Math.abs(inCar.speed) : player.speed;
   const dist = G.camDist + speed * 0.12;
-  const height = 4.5 + speed * 0.05;
+  const height = 4.5 + speed * 0.05 + (G.shotCamH ?? 0);
   let yaw;
   if (inCar) {
     G.camYaw = angleLerp(G.camYaw, inCar.heading, clamp(dt * 1.2, 0, 1));
@@ -296,7 +296,9 @@ function updateCamera(dt) {
   const px = player.pos.x, pz = player.pos.z;
   camTarget.set(px - fx * dist, height + (inCar ? 1.5 : 0), pz - fz * dist);
   camera.position.lerp(camTarget, clamp(dt * 5, 0, 1));
-  camera.lookAt(px + fx * 4, inCar ? 2.2 : 1.6, pz + fz * 4);
+  // v3: a staged shot may look up at a monument (shotLookY) instead of at
+  // the player's head height.
+  camera.lookAt(px + fx * 4, G.shotLookY ?? (inCar ? 2.2 : 1.6), pz + fz * 4);
 }
 
 // ---- One fixed step of the world ----
@@ -318,11 +320,12 @@ function stepWorld(dt) {
     player.pos.copy(player.inCar.mesh.position);
     player.heading = player.inCar.heading;
   } else {
-    updatePlayerOnFoot(player, input, G.camYaw, dt);
+    updatePlayerOnFoot(player, input, G.camYaw, dt, G.now);
   }
   updateTraffic(traffic.filter((c) => c !== player.inCar), player.pos, dt);
   const danger = police.wanted > 0 || player.punchCd > 0.3 ? { x: player.pos.x, z: player.pos.z } : null;
-  updatePedestrians(peds, danger, dt);
+  updatePedestrians(peds, danger, dt, G.now);
+  city.updateVendors(dt, G.now); // stall vendors call out, keliling vendors walk
   const result = updatePolice(police, scene, player, player.inCar, G.now, dt);
   if (result === 'busted') {
     player.cash = Math.max(0, player.cash - 150000);

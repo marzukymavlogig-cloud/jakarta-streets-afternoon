@@ -11,6 +11,32 @@ export const CITY = {
 };
 export const ROAD_Y = 0.02;
 
+/** Vendor stalls ringing Lapangan Merdeka + the Thamrin avenue (v3).
+ *  Shared with player.js so the Monas crowd drifts stall to stall. */
+export const PLAZA_STALLS = [
+  { x: 56, z: 0, type: 'gerobak', label: 'BAKSO', color: '#c23b2e' },
+  { x: -56, z: 0, type: 'tenda', label: 'NASI GORENG', color: '#e87a2e' },
+  { x: 14, z: 54, type: 'gerobak', label: 'ES TEH MANIS', color: '#4fc2c2' },
+  { x: -14, z: -54, type: 'tenda', label: 'SATE AYAM', color: '#3aa655' },
+  { x: 54, z: 54, type: 'kakilima', label: 'GORENGAN', color: '#e8b93b' },
+  { x: -54, z: 54, type: 'gerobak', label: 'BUAH POTONG', color: '#e87a2e' },
+  { x: 54, z: -54, type: 'tenda', label: 'MIE AYAM', color: '#0b5fa5' },
+  { x: -54, z: -54, type: 'kakilima', label: 'JAJAN PASAR', color: '#8a4fbf' },
+  { x: 24, z: -64, type: 'gerobak', label: 'KOPI', color: '#6a4a2a' },
+  { x: -24, z: 64, type: 'tenda', label: 'KETOPRAK', color: '#3aa655' },
+  { x: 66, z: -20, type: 'kakilima', label: 'ES CAMPUR', color: '#c23b7a' },
+  { x: -66, z: 20, type: 'gerobak', label: 'SOTO', color: '#e8b93b' },
+];
+/** Walking vendors (penjual keliling) circling the plaza. */
+export const KELILING = [
+  { label: 'JUS', color: '#e87a2e', radius: 62, speed: 0.022, phase: 0 },
+  { label: 'ROKOK & PULSA', color: '#22242a', radius: 68, speed: -0.018, phase: 2.1 },
+  { label: 'KACANG', color: '#8a4fbf', radius: 58, speed: 0.026, phase: 4.4 },
+];
+/** Kampung blocks (v3): dense informal housing, east side. Block centres
+ *  (241/319, 85/163) — see createCity's building loop. */
+export const KAMPUNG = { x0: 200, x1: 351, z0: 40, z1: 220 };
+
 function roadCoord(i) {
   return -CITY.half + i * (CITY.block + CITY.road) + CITY.road / 2 - CITY.road / 2;
 }
@@ -128,6 +154,64 @@ function rukoFacade(rng) {
   return tex;
 }
 
+function corrugatedTexture(rng, base) {
+  // Weathered corrugated-iron roof/wall: vertical ribs + rust streaks.
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = base; g.fillRect(0, 0, 128, 128);
+  for (let x = 0; x < 128; x += 8) {
+    g.fillStyle = 'rgba(255,255,255,0.14)'; g.fillRect(x, 0, 2, 128);
+    g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(x + 4, 0, 2, 128);
+  }
+  for (let i = 0; i < 26; i++) {
+    g.fillStyle = `rgba(120,60,20,${0.08 + rng() * 0.16})`;
+    const x = rng() * 128, y = rng() * 128;
+    g.fillRect(x, y, 3 + rng() * 5, 12 + rng() * 30);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function stripedTexture(colorA, colorB) {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 64;
+  const g = c.getContext('2d');
+  for (let x = 0; x < 128; x += 16) {
+    g.fillStyle = (x / 16) % 2 === 0 ? colorA : colorB;
+    g.fillRect(x, 0, 16, 64);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function blueGlassFacade(rng) {
+  // Sudirman blue-glass tower: vertical mullions + sky reflection.
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 256;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#4a7a9a'); grad.addColorStop(0.5, '#2e5a7a'); grad.addColorStop(1, '#1d3a52');
+  g.fillStyle = grad; g.fillRect(0, 0, 128, 256);
+  for (let x = 8; x < 128; x += 12) {
+    g.fillStyle = 'rgba(200,225,245,0.5)'; g.fillRect(x, 0, 2, 256);
+  }
+  for (let y = 10; y < 246; y += 18) {
+    for (let x = 10; x < 120; x += 16) {
+      const lit = rng() < 0.4;
+      g.fillStyle = lit ? '#ffd98a' : 'rgba(10,20,30,0.7)';
+      g.fillRect(x, y, 9, 11);
+    }
+  }
+  g.fillStyle = 'rgba(255,190,110,0.25)';
+  g.fillRect(0, 40, 128, 26);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 export function createCity(scene, seed) {
   const rng = mulberry32(seed);
   const group = new THREE.Group();
@@ -213,8 +297,15 @@ export function createCity(scene, seed) {
   group.add(bridgeDeck);
 
   // Buildings: glass towers downtown, ruko shophouses mid-city, low houses at the edge.
+  // v3: three landmark setback towers on Sudirman, blue-glass for the tallest
+  // towers, three ruko facade variants — and the kampung blocks are left to
+  // the informal-housing builder below instead of getting normal buildings.
   const glass = glassFacade(rng);
-  const ruko = rukoFacade(rng);
+  const blueGlass = blueGlassFacade(rng);
+  const rukoTexs = [rukoFacade(rng), rukoFacade(rng), rukoFacade(rng)];
+  const LANDMARKS = [[-71, -71], [85, -71], [-71, 85]];
+  const isLandmark = (cx, cz) => LANDMARKS.some(([lx, lz]) => lx === cx && lz === cz);
+  const isKampung = (cx, cz) => cx >= KAMPUNG.x0 && cx <= KAMPUNG.x1 && cz >= KAMPUNG.z0 && cz <= KAMPUNG.z1;
   const bGeo = new THREE.BoxGeometry(1, 1, 1);
   bGeo.translate(0, 0.5, 0);
   const spots = [];
@@ -223,6 +314,7 @@ export function createCity(scene, seed) {
       const cx = -half + CITY.road + ix * step + CITY.block / 2;
       const cz = -half + CITY.road + iz * step + CITY.block / 2;
       if (Math.abs(cx) < 45 && Math.abs(cz) < 45) continue; // Monas plaza stays open
+      if (isLandmark(cx, cz) || isKampung(cx, cz)) continue;
       const dc = Math.max(Math.abs(cx), Math.abs(cz)) / half;
       const n = dc < 0.25 ? 2 : (rng() < 0.6 ? 2 : 1);
       for (let k = 0; k < n; k++) {
@@ -254,15 +346,324 @@ export function createCity(scene, seed) {
     group.add(inst);
     return inst;
   }
-  fillInstanced(glassSpots, new THREE.MeshLambertMaterial({ map: glass }),
+  // Tallest downtown towers get the blue Sudirman glass; the rest warm glass.
+  fillInstanced(glassSpots.filter((b) => b.h > 70), new THREE.MeshLambertMaterial({ map: blueGlass }),
+    [0x9fb4c4, 0x7e94a8, 0x8aa8c0, 0x6a8aa8], true);
+  fillInstanced(glassSpots.filter((b) => b.h <= 70), new THREE.MeshLambertMaterial({ map: glass }),
     [0xd8b48a, 0xc9a06a, 0xb98d5f, 0x9fb4c4, 0x7e94a8, 0xd8c9a8, 0xa88a7a, 0x8a9a8a], true);
-  fillInstanced(rukoSpots, new THREE.MeshLambertMaterial({ map: ruko }),
-    [0xe8dcc0, 0xd8c9a8, 0xc9b48a, 0xd8d8d8, 0xc9a06a], false);
+  // Ruko shophouses in three facade variants so the streets don't repeat.
+  const rukoPalettes = [
+    [0xe8dcc0, 0xd8c9a8, 0xc9b48a], [0xd8d8d8, 0xc9a06a, 0xe8dcc0], [0xc9b48a, 0xd8c9a8, 0xb8c9d8],
+  ];
+  for (let v = 0; v < 3; v++) {
+    const sub = rukoSpots.filter((_, i) => i % 3 === v);
+    if (sub.length) fillInstanced(sub, new THREE.MeshLambertMaterial({ map: rukoTexs[v] }), rukoPalettes[v], false);
+  }
+  // Landmark setback towers on Sudirman: stacked slabs + spire, like the
+  // real skyline — each one reads as a different building, not a clone.
+  const landmarkDefs = [
+    { x: -71, z: -71, h: 185, tint: 0x7e94a8, tex: blueGlass },
+    { x: 85, z: -71, h: 150, tint: 0xd8b48a, tex: glass },
+    { x: -71, z: 85, h: 165, tint: 0x9fb4c4, tex: blueGlass },
+  ];
+  for (const lm of landmarkDefs) {
+    const lmMat = new THREE.MeshLambertMaterial({ map: lm.tex, color: lm.tint });
+    const tiers = [[26, lm.h * 0.55, 0], [20, lm.h * 0.3, lm.h * 0.55], [13, lm.h * 0.15, lm.h * 0.85]];
+    for (const [w, h, y0] of tiers) {
+      const tier = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), lmMat);
+      tier.position.set(lm.x, 0.3 + y0 + h / 2, lm.z);
+      tier.castShadow = true; tier.receiveShadow = true;
+      group.add(tier);
+    }
+    const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 1.2, 16, 6),
+      new THREE.MeshLambertMaterial({ color: 0x44484f }));
+    spire.position.set(lm.x, 0.3 + lm.h + 8, lm.z); group.add(spire);
+    const crown = new THREE.Mesh(new THREE.SphereGeometry(1.4, 6, 6), beaconMat0());
+    crown.position.set(lm.x, 0.3 + lm.h + 17, lm.z); group.add(crown);
+  }
+  function beaconMat0() { return new THREE.MeshBasicMaterial({ color: 0xff4444 }); }
+  // ---- KAMPUNG (v3): dense informal housing on the east side ----
+  // Tiny houses crammed along narrow alleys, corrugated-iron roofs in rust
+  // and faded paint, laundry lines strung between them, wires tangled
+  // overhead. Two instanced meshes keep it cheap; laundry + wires are one
+  // small set of meshes on top.
+  {
+    const kampungBlocks = [[241, 85], [319, 85], [241, 163], [319, 163]];
+    const houses = [];
+    for (const [bx, bz] of kampungBlocks) {
+      for (let gx = -2; gx <= 2; gx++) {
+        for (let gz = -2; gz <= 2; gz++) {
+          if (Math.abs(gx) === 2 && Math.abs(gz) === 2 && rng() < 0.5) continue; // corner gaps
+          const hx = bx + gx * 11 + rand(rng, -3, 3);
+          const hz = bz + gz * 11 + rand(rng, -3, 3);
+          // Leave the cross alleys walkable: no house on the centre lanes.
+          if (Math.abs(hx - bx) < 2.5 || Math.abs(hz - bz) < 2.5) continue;
+          houses.push({
+            x: hx, z: hz, w: rand(rng, 5, 8.5), d: rand(rng, 5, 7.5),
+            h: rand(rng, 3, 4.6) + (rng() < 0.25 ? 2.6 : 0),
+            rot: (rng() < 0.5 ? 0 : Math.PI / 2) + rand(rng, -0.12, 0.12),
+          });
+        }
+      }
+    }
+    const wallTex = corrugatedTexture(rng, '#b8a888');
+    const wallGeo = new THREE.BoxGeometry(1, 1, 1);
+    wallGeo.translate(0, 0.5, 0);
+    const walls = new THREE.InstancedMesh(wallGeo,
+      new THREE.MeshLambertMaterial({ map: wallTex }), houses.length);
+    walls.castShadow = true; walls.receiveShadow = true;
+    const roofGeo = new THREE.CylinderGeometry(1, 1, 1, 3, 1);
+    roofGeo.rotateX(Math.PI / 2); // triangular prism, axis along z = gable roof
+    roofGeo.rotateZ(Math.PI); // flat side down
+    const roofs = new THREE.InstancedMesh(roofGeo,
+      new THREE.MeshLambertMaterial({ map: corrugatedTexture(rng, '#8a4a3a') }), houses.length);
+    roofs.castShadow = true;
+    const roofCols = [0x8a4a3a, 0x6a6a6a, 0x4a6a5a, 0xa85a2a, 0x7a7a7a, 0x5a5a6a];
+    const wallCols = [0xd8c9a8, 0xc9b48a, 0xb8c9d8, 0xe8d8c9, 0x9a8a6a, 0x7a9a8a, 0xd8b8a8];
+    const rq = new THREE.Quaternion(), eul = new THREE.Euler();
+    houses.forEach((hs, i) => {
+      eul.set(0, hs.rot, 0); rq.setFromEuler(eul);
+      p.set(hs.x, 0.3, hs.z); s.set(hs.w, hs.h, hs.d);
+      m4.compose(p, rq, s); walls.setMatrixAt(i, m4);
+      col.setHex(pick(rng, wallCols)); walls.setColorAt(i, col);
+      // Gable roof: prism scaled to the house footprint, ridge along the long side.
+      const ridge = hs.w >= hs.d ? hs.w : hs.d;
+      const span = hs.w >= hs.d ? hs.d : hs.w;
+      p.set(hs.x, 0.3 + hs.h + span * 0.2, hs.z);
+      // Prism axis is z: z-scale is the ridge length, x/y the cross-section.
+      s.set(span * 0.55, span * 0.45, ridge * 0.55);
+      eul.set(0, hs.rot + (hs.w >= hs.d ? Math.PI / 2 : 0), 0); rq.setFromEuler(eul);
+      m4.compose(p, rq, s); roofs.setMatrixAt(i, m4);
+      col.setHex(pick(rng, roofCols)); roofs.setColorAt(i, col);
+    });
+    walls.instanceMatrix.needsUpdate = true;
+    if (walls.instanceColor) walls.instanceColor.needsUpdate = true;
+    roofs.instanceMatrix.needsUpdate = true;
+    if (roofs.instanceColor) roofs.instanceColor.needsUpdate = true;
+    group.add(walls); group.add(roofs);
+    // Laundry lines between houses + tangled wires overhead.
+    const clothCols = [0xe8e4da, 0xd84a4a, 0x3a7bd8, 0xe8b93b, 0x3aa655, 0x8a4fbf, 0xe87a2e];
+    const clothGeo = new THREE.PlaneGeometry(0.9, 1.1);
+    const clothMat = clothCols.map((c) => new THREE.MeshLambertMaterial({ color: c, side: THREE.DoubleSide }));
+    const wirePts = [];
+    let laundry = 0;
+    for (let i = 0; i < houses.length - 1 && laundry < 16; i += 2) {
+      const a = houses[i], b = houses[i + 1];
+      if (Math.hypot(a.x - b.x, a.z - b.z) > 16) continue;
+      const y = Math.min(a.h, b.h) + 0.8;
+      for (let k = 0; k < 3; k++) {
+        const t = 0.25 + k * 0.25;
+        const cx = a.x + (b.x - a.x) * t, cz = a.z + (b.z - a.z) * t;
+        const cloth = new THREE.Mesh(clothGeo, clothMat[Math.floor(rng() * clothMat.length)]);
+        cloth.position.set(cx, y - 0.6, cz);
+        cloth.rotation.y = Math.atan2(b.x - a.x, b.z - a.z) + Math.PI / 2;
+        cloth.rotation.z = rand(rng, -0.08, 0.08);
+        group.add(cloth);
+      }
+      wirePts.push(new THREE.Vector3(a.x, 0.3 + y, a.z),
+        new THREE.Vector3((a.x + b.x) / 2, 0.3 + y - 0.7, (a.z + b.z) / 2),
+        new THREE.Vector3((a.x + b.x) / 2, 0.3 + y - 0.7, (a.z + b.z) / 2),
+        new THREE.Vector3(b.x, 0.3 + y, b.z));
+      laundry += 1;
+    }
+    // Extra tangled wires criss-crossing the alleys.
+    for (let i = 0; i < 10; i++) {
+      const a = houses[Math.floor(rng() * houses.length)];
+      const b = houses[Math.floor(rng() * houses.length)];
+      const y = 5 + rng() * 2;
+      wirePts.push(new THREE.Vector3(a.x, y, a.z),
+        new THREE.Vector3((a.x + b.x) / 2, y - 1.2, (a.z + b.z) / 2),
+        new THREE.Vector3((a.x + b.x) / 2, y - 1.2, (a.z + b.z) / 2),
+        new THREE.Vector3(b.x, y, b.z));
+    }
+    const wireGeo = new THREE.BufferGeometry().setFromPoints(wirePts);
+    group.add(new THREE.LineSegments(wireGeo, new THREE.LineBasicMaterial({ color: 0x1a1a1a })));
+    // A couple of water tanks on the tallest roofs.
+    const tankMat = new THREE.MeshLambertMaterial({ color: 0x2a4a6a });
+    houses.filter((h) => h.h > 5).slice(0, 3).forEach((h) => {
+      const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 1.4, 8), tankMat);
+      tank.position.set(h.x, 0.3 + h.h + 2.2, h.z); group.add(tank);
+    });
+  }
+  addSign('KAMPUNG MELAYU', 'Gang Sempit — RT 04', 208, 60, Math.PI / 2, 13, '#3aa655');
+
+  // ---- VENDORS (v3): kaki lima, gerobak, warung tenda, penjual keliling ----
+  // Shared geometries/materials so ~15 stalls stay cheap.
+  const vendorAnim = [];
+  const goodGeos = {
+    sphere: new THREE.SphereGeometry(0.16, 8, 6),
+    box: new THREE.BoxGeometry(0.3, 0.22, 0.3),
+    cyl: new THREE.CylinderGeometry(0.11, 0.11, 0.32, 8),
+    stick: new THREE.CylinderGeometry(0.03, 0.03, 0.9, 5),
+  };
+  const goodMats = {
+    orange: new THREE.MeshLambertMaterial({ color: 0xe87a2e }),
+    green: new THREE.MeshLambertMaterial({ color: 0x3aa655 }),
+    tan: new THREE.MeshLambertMaterial({ color: 0xd8b48a }),
+    white: new THREE.MeshLambertMaterial({ color: 0xf2ead8 }),
+    red: new THREE.MeshLambertMaterial({ color: 0xc23b2e }),
+    brown: new THREE.MeshLambertMaterial({ color: 0x6a4a2a }),
+  };
+  const goodKinds = ['sphere', 'box', 'cyl'];
+  const woodMat = new THREE.MeshLambertMaterial({ color: 0x7a5a38 });
+  const darkMatV = new THREE.MeshLambertMaterial({ color: 0x2e2a26 });
+  function addGoods(stall, n, y, spread) {
+    for (let i = 0; i < n; i++) {
+      const kind = pick(rng, goodKinds);
+      const mat = pick(rng, [goodMats.orange, goodMats.green, goodMats.tan, goodMats.white, goodMats.red]);
+      const good = new THREE.Mesh(goodGeos[kind], mat);
+      good.position.set(rand(rng, -spread, spread), y + (kind === 'cyl' ? 0.16 : 0.1), rand(rng, -spread * 0.6, spread * 0.6));
+      stall.add(good);
+    }
+  }
+  function vendorFigure(shirtHex, skinHex, hijabHex) {
+    // Vendor behind a counter: head + torso + waving arm only (legs hidden).
+    const g = new THREE.Group();
+    const shirt = new THREE.MeshLambertMaterial({ color: shirtHex });
+    const skin = new THREE.MeshLambertMaterial({ color: skinHex });
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.38, 4, 10), shirt);
+    torso.position.y = 1.24; g.add(torso);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.235, 12, 10), skin);
+    head.position.y = 1.79; g.add(head);
+    if (hijabHex) {
+      const hj = new THREE.Mesh(new THREE.SphereGeometry(0.295, 12, 10),
+        new THREE.MeshLambertMaterial({ color: hijabHex }));
+      hj.position.y = 1.8; g.add(hj);
+    } else {
+      const hair = new THREE.Mesh(new THREE.SphereGeometry(0.245, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.55),
+        new THREE.MeshLambertMaterial({ color: 0x1c1410 }));
+      hair.position.y = 1.82; g.add(hair);
+    }
+    const armPivot = new THREE.Group();
+    armPivot.position.set(0.33, 1.52, 0);
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.42, 4, 8), shirt);
+    arm.position.y = -0.26; armPivot.add(arm);
+    g.add(armPivot);
+    const arm2 = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.42, 4, 8), shirt);
+    arm2.position.set(-0.33, 1.26, 0); g.add(arm2);
+    return { group: g, armPivot, head };
+  }
+  function addStallSign(stall, label, bg) {
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.4),
+      new THREE.MeshBasicMaterial({ map: makeSignTexture(label, '#22242a', '#ffd23b', ''), side: THREE.DoubleSide }));
+    board.position.set(0, 3.4, 0); stall.add(board);
+  }
+  for (const sp of PLAZA_STALLS) {
+    const stall = new THREE.Group();
+    const face = Math.atan2(-sp.x, -sp.z); // face Monas
+    if (sp.type === 'gerobak') {
+      // Pushcart: wooden box on two wheels, goods on top, big umbrella.
+      const cart = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.8, 1.1), woodMat);
+      cart.position.y = 0.9; stall.add(cart);
+      for (const wx of [-0.95, 0.95]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.14, 10), darkMatV);
+        wheel.rotation.z = Math.PI / 2; wheel.position.set(wx, 0.42, 0); stall.add(wheel);
+      }
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.4, 5), darkMatV);
+      pole.position.y = 2.4; stall.add(pole);
+      const umb = new THREE.Mesh(new THREE.ConeGeometry(1.6, 0.6, 10),
+        new THREE.MeshLambertMaterial({ color: new THREE.Color(sp.color) }));
+      umb.position.y = 3.7; stall.add(umb);
+      addGoods(stall, 7, 1.32, 0.7);
+      const v = vendorFigure(pick(rng, [0xd84a4a, 0x3a7bd8, 0x3aa655, 0xe87a2e]), pick(rng, [0x8a5a3b, 0xc98d64, 0x6b4423]), rng() < 0.4 ? 0x8a4fbf : null);
+      v.group.position.set(0, 0, -1.1); v.group.rotation.y = Math.PI;
+      stall.add(v.group); vendorAnim.push(v);
+    } else if (sp.type === 'tenda') {
+      // Warung tenda: striped canopy on four poles, counter, goods, sign.
+      const canopy = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.18, 3.4),
+        new THREE.MeshLambertMaterial({ map: stripedTexture(sp.color, '#f2ead8') }));
+      canopy.position.y = 2.9; canopy.rotation.x = 0.08; stall.add(canopy);
+      for (const [px, pz] of [[-2.1, -1.5], [2.1, -1.5], [-2.1, 1.5], [2.1, 1.5]]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.9, 5), darkMatV);
+        post.position.set(px, 1.45, pz); stall.add(post);
+      }
+      const counter = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.1, 1.6), woodMat);
+      counter.position.set(0, 0.55, 0.6); stall.add(counter);
+      addGoods(stall, 8, 1.12, 1.7);
+      // A low stove with a steaming pot for the food stalls.
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.34, 0.35, 10), darkMatV);
+      pot.position.set(1.4, 1.3, 0.6); stall.add(pot);
+      const v = vendorFigure(pick(rng, [0xe8b93b, 0x3aa655, 0xc23b7a, 0x2e8f8f]), pick(rng, [0x8a5a3b, 0xc98d64, 0xe8b88a]), rng() < 0.5 ? pick(rng, [0x3a7bd8, 0xd84a4a, 0x2a2a2a]) : null);
+      v.group.position.set(0, 0, -0.7); v.group.rotation.y = Math.PI;
+      stall.add(v.group); vendorAnim.push(v);
+    } else {
+      // Kaki lima: mat on the ground, low table, baskets of goods.
+      const mat = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2.4),
+        new THREE.MeshLambertMaterial({ color: 0x8a6a4a }));
+      mat.rotation.x = -Math.PI / 2; mat.position.y = 0.32; stall.add(mat);
+      const table = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.5, 1.4), woodMat);
+      table.position.y = 0.6; stall.add(table);
+      addGoods(stall, 8, 0.88, 1.0);
+      const basket = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.4, 0.5, 8),
+        new THREE.MeshLambertMaterial({ color: 0xa88a5a }));
+      basket.position.set(1.5, 0.55, 0); stall.add(basket);
+      const v = vendorFigure(pick(rng, [0x5a6a3a, 0xd84a4a, 0x8a4fbf]), pick(rng, [0x6b4423, 0xc98d64, 0xa06a42]), rng() < 0.4 ? 0x3aa655 : null);
+      v.group.position.set(0, 0, -1.2); v.group.rotation.y = Math.PI;
+      stall.add(v.group); vendorAnim.push(v);
+    }
+    addStallSign(stall, sp.label, sp.color);
+    stall.position.set(sp.x, 0.3, sp.z);
+    stall.rotation.y = face;
+    group.add(stall);
+  }
+  // Penjual keliling: walking vendors with a shoulder basket, circling the plaza.
+  const kelilingFigs = [];
+  for (const k of KELILING) {
+    const fig = new THREE.Group();
+    const shirt = new THREE.MeshLambertMaterial({ color: new THREE.Color(k.color) });
+    const skin = new THREE.MeshLambertMaterial({ color: 0x8a5a3b });
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.38, 4, 10), shirt);
+    torso.position.y = 1.24; fig.add(torso);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.235, 12, 10), skin);
+    head.position.y = 1.79; fig.add(head);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.25, 0.1, 10),
+      new THREE.MeshLambertMaterial({ color: 0x22242a }));
+    cap.position.y = 1.94; fig.add(cap);
+    for (const side of [-1, 1]) {
+      const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.42, 4, 8), shirt);
+      arm.position.set(0.33 * side, 1.26, 0); fig.add(arm);
+      const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.105, 0.34, 4, 8),
+        new THREE.MeshLambertMaterial({ color: 0x2e3a4a }));
+      thigh.position.set(0.13 * side, 0.76, 0); fig.add(thigh);
+      const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.088, 0.36, 4, 8),
+        new THREE.MeshLambertMaterial({ color: 0x2e3a4a }));
+      shin.position.set(0.13 * side, 0.28, 0); fig.add(shin);
+    }
+    const basket = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.34, 0.4, 8),
+      new THREE.MeshLambertMaterial({ color: 0xa88a5a }));
+    basket.position.set(0.3, 1.05, -0.32); fig.add(basket);
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.8),
+      new THREE.MeshBasicMaterial({ map: makeSignTexture(k.label, '#22242a', '#ffd23b', ''), side: THREE.DoubleSide }));
+    board.position.set(0, 2.5, 0); fig.add(board);
+    group.add(fig);
+    kelilingFigs.push({ fig, def: k, angle: k.phase, bob: 0 });
+  }
+  function updateVendors(dt, now) {
+    // Stall vendors call out: one arm waves, head turns to the crowd.
+    vendorAnim.forEach((v, i) => {
+      v.armPivot.rotation.x = -1.1 + Math.sin(now * 2.2 + i * 1.7) * 0.45;
+      v.armPivot.rotation.z = 0.25;
+      v.head.rotation.y = Math.sin(now * 0.7 + i * 2.3) * 0.5;
+    });
+    // Keliling vendors walk their slow circle around the plaza.
+    for (const k of kelilingFigs) {
+      k.angle += k.def.speed * dt;
+      const x = Math.cos(k.angle) * k.def.radius;
+      const z = Math.sin(k.angle) * k.def.radius;
+      k.fig.position.set(x, 0.3 + Math.abs(Math.sin(now * 5 + k.angle * 10)) * 0.05, z);
+      k.fig.rotation.y = Math.atan2(-Math.sin(k.angle) * Math.sign(k.def.speed), Math.cos(k.angle) * Math.sign(k.def.speed));
+    }
+  }
+
   // Rooftop beacons downtown.
   const beaconMat = new THREE.MeshBasicMaterial({ color: 0xff4444 });
   spots.filter((b) => b.h > 70).forEach((b) => {
     const bk = new THREE.Mesh(new THREE.SphereGeometry(0.9, 6, 6), beaconMat);
     bk.position.set(b.x, 0.3 + b.h + 1, b.z); group.add(bk);
+  });
+  landmarkDefs.forEach((lm) => {
+    const bk = new THREE.Mesh(new THREE.SphereGeometry(0.9, 6, 6), beaconMat);
+    bk.position.set(lm.x, 0.3 + lm.h + 1, lm.z); group.add(bk);
   });
 
   // ---- MONAS: the National Monument at the centre of Lapangan Merdeka ----
@@ -488,7 +889,7 @@ export function createCity(scene, seed) {
   scene.add(rain);
 
   return {
-    group, sky, skyMat, sun, sunLight, hemi, rain,
+    group, sky, skyMat, sun, sunLight, hemi, rain, updateVendors,
     /** hour 0..24, weather 'clear'|'rain'|'fog'. Golden-hour afternoon by default. */
     updateSky(hour, weather) {
       const t = (hour - 6) / 12; // 0 at dawn, 1 at dusk (sunset ~18:00)

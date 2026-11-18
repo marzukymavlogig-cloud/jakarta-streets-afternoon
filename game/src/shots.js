@@ -8,7 +8,7 @@ import { dist2D, angleDiff } from './util.js';
 import { addWanted } from './police.js';
 import { startStoryMission } from './missions.js';
 
-export const SHOT_NAMES = ['start', 'play', 'chase', 'mission'];
+export const SHOT_NAMES = ['start', 'play', 'chase', 'mission', 'monas', 'vendors', 'kampung'];
 
 /** Place the world for a shot: golden-hour time, weather, wanted level, story. */
 export function placeForShot(G, name) {
@@ -32,6 +32,46 @@ export function placeForShot(G, name) {
     G.camMode = 'follow';
     G.camYaw = -0.26;
     return { seconds: 1.0 };
+  }
+  if (name === 'monas') {
+    // v3: Mara on foot on the plaza's south edge, Monas ahead, the crowd and
+    // the vendor ring all around her.
+    G.hour = 16.3; G.weather = 'clear';
+    p.pos.set(0, 0, 40); p.heading = Math.PI;
+    p.inCar = null; p.mesh.visible = true;
+    p.mesh.position.copy(p.pos);
+    G.missions.marker.group.visible = false;
+    G.camMode = 'follow';
+    G.camYaw = Math.PI;
+    G.camDist = 18; G.shotLookY = 12; G.shotCamH = 3; // crowd in frame, Monas shaft rising above
+    G.hud.setObjective('Monas — sore di Lapangan Merdeka, kaki lima di mana-mana');
+    return { seconds: 2.5 };
+  }
+  if (name === 'vendors') {
+    // v3: Mara on the Thamrin sidewalk among the gerobak and warung tenda,
+    // the halte and the avenue behind her.
+    G.hour = 16.4; G.weather = 'clear';
+    p.pos.set(18, 0, -60); p.heading = 2.16;
+    p.inCar = null; p.mesh.visible = true;
+    p.mesh.position.copy(p.pos);
+    G.missions.marker.group.visible = false;
+    G.camMode = 'follow';
+    G.camYaw = 2.16; G.camDist = 9;
+    G.hud.setObjective('Kaki lima Jl. Thamrin — bakso, sate, es teh');
+    return { seconds: 2.5 };
+  }
+  if (name === 'kampung') {
+    // v3: Mara inside the kampung — dense houses, corrugated roofs, laundry
+    // lines and tangled wires down a narrow alley.
+    G.hour = 16.5; G.weather = 'clear';
+    p.pos.set(241, 0, 150); p.heading = 0.7;
+    p.inCar = null; p.mesh.visible = true;
+    p.mesh.position.copy(p.pos);
+    G.missions.marker.group.visible = false;
+    G.camMode = 'follow';
+    G.camYaw = 0.7;
+    G.hud.setObjective('Kampung Melayu — gang sempit, jemuran, kabel semrawut');
+    return { seconds: 1.5 };
   }
   if (name === 'chase') {
     G.hour = 16.5; G.weather = 'clear';
@@ -58,7 +98,8 @@ export function placeForShot(G, name) {
   G.missions.marker.group.visible = true;
   G.hud.setObjective('Gig: Jemput penumpang di Monas — ikuti marker');
   G.camMode = 'chase';
-  return { seconds: 6 };
+  return { seconds: 6 }; // 6 s puts the car just past the Monas plaza slab (which
+  // covers the road at |x|<48); shorter stops the car sunk in the plaza
 }
 
 function enterCar(G, car) {
