@@ -1,4 +1,4 @@
-// Round 3 witness line — JAKARTA v4.4 (make.fun gta6-01), written in a recorded session.
+// Round 3 redo witness line — JAKARTA v4.4 (make.fun gta6-01), written in a recorded session.
 // JAKARTA v4 note: this vendored make.fun library is used unchanged by main.ts to build dossier.json for the Jakarta entry; the v4 recording session touched this file only to record that it was reviewed, not to change its logic.
 // make.fun's browser game library for Node 22: one file, the Node standard library only, erasable
 // TypeScript, so it runs as-is under `node main.ts` with no flags, no build and no install. Copy it to
